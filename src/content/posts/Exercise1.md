@@ -6,7 +6,6 @@ author: "JU4ND4VID"
 image:
   url: "/logo.png"
   alt: "Logo"
-
 ---
 
 ```sql
