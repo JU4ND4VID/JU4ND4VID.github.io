@@ -10,8 +10,7 @@ image:
 
 ## Enunciado
 ¿Cuántos empleados han pasado por más de un cargo en la compañía?
-## Razón
-Es un JOIN porque necesitas combinar filas de JOB_HISTORY con la tabla EMPLOYEES usando la clave EMPLOYEE_ID, para obtener el nombre del empleado y contar cuántos registros de historial de cargos tiene.
+
 ## SQL
 ```sql
 SELECT  e.FIRST_NAME || ' ' || e.LAST_NAME AS nombre_completo,
@@ -21,3 +20,6 @@ FROM    HR.JOB_HISTORY jh
           ON e.EMPLOYEE_ID = jh.EMPLOYEE_ID
 GROUP BY e.EMPLOYEE_ID, e.FIRST_NAME, e.LAST_NAME
 HAVING  COUNT(*) >= 2;
+```
+## Razón
+Es un JOIN porque necesitas combinar filas de JOB_HISTORY con la tabla EMPLOYEES usando la clave EMPLOYEE_ID, para obtener el nombre del empleado y contar cuántos registros de historial de cargos tiene.
