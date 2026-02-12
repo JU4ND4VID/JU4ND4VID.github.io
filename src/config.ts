@@ -11,17 +11,13 @@ import type {
 export const identity: Identity = {
   name: "Juan David Peña",
   logo: "/avatar.png",
-  email: "tim@witzdam.com",
+  email: "jdpenac@unbosque.edu.co",
 };
 
 export const navBarLinks: NavBarLink[] = [
   {
     title: "Home",
     url: "/",
-  },
-  {
-    title: "About",
-    url: "/about",
   },
   {
     title: "Projects",
@@ -71,7 +67,7 @@ export const homePageContent: HomePageContent = {
 // Projects (/projects)
 export const projectsPageContent: ProjectPageContent = {
   seo: {
-    title: "Projects | Tim Witzdam",
+    title: "Projects | Juan David Peña",
     description: "Check out what I've been working on.",
     image: identity.logo,
   },
@@ -104,8 +100,8 @@ export const projectsPageContent: ProjectPageContent = {
 // Blog (/blog)
 export const blogPageContent: BlogPageContent = {
   seo: {
-    title: "Blog | Tim Witzdam",
-    description: "Thoughts, stories and ideas.",
+    title: "Consultas SQL Oracle | Juan David Peña",
+    description: "Consultas",
     image: identity.logo,
   },
   subtitle: "Thoughts, stories and ideas.",
