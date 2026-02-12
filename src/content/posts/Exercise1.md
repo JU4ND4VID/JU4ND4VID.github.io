@@ -4,7 +4,7 @@ pubDate: 2026-02-12
 description: "Ejemplos de INNER/LEFT JOIN."
 author: "JU4ND4VID"
 image:
-  url: "/images/sql.jpg"
+  url: "/logo.png"
   alt: "SQL"
 ---
 
