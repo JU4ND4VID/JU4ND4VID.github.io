@@ -5,7 +5,8 @@ description: "Ejemplos de INNER/LEFT JOIN."
 author: "JU4ND4VID"
 image:
   url: "/logo.png"
-  alt: "SQL"
+  alt: "Logo"
+
 ---
 
 ```sql
