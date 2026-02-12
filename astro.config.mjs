@@ -1,18 +1,13 @@
 import { defineConfig } from "astro/config";
 import icon from "astro-icon";
 import { remarkReadingTime } from "./remark-reading-time.mjs";
-import node from "@astrojs/node";
-
 import tailwindcss from "@tailwindcss/vite";
 
-// https://astro.build/config
 export default defineConfig({
-  integrations: [icon()],
-  output: "server",
+  site: "https://ju4nd4vid.github.io",
+  output: "static",
 
-  adapter: node({
-    mode: "standalone",
-  }),
+  integrations: [icon()],
 
   markdown: {
     remarkPlugins: [remarkReadingTime],
