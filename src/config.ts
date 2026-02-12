@@ -9,7 +9,7 @@ import type {
 } from "./types/config";
 
 export const identity: Identity = {
-  name: "Tim Witzdam",
+  name: "Juan David Peña",
   logo: "/logo.webp",
   email: "tim@witzdam.com",
 };
@@ -28,7 +28,7 @@ export const navBarLinks: NavBarLink[] = [
     url: "/projects",
   },
   {
-    title: "Blog",
+    title: "SQL",
     url: "/blog",
   },
 ];
@@ -36,7 +36,7 @@ export const navBarLinks: NavBarLink[] = [
 export const socialLinks: SocialLink[] = [
   {
     title: "GitHub",
-    url: "https://github.com/TimWitzdam",
+    url: "https://github.com/JU4ND4VID",
     icon: "mdi:github",
     external: true,
   },
