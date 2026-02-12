@@ -10,7 +10,7 @@ import type {
 
 export const identity: Identity = {
   name: "Juan David Peña",
-  logo: "/logo.webp",
+  logo: "/avatar.png",
   email: "tim@witzdam.com",
 };
 
@@ -40,24 +40,20 @@ export const socialLinks: SocialLink[] = [
     icon: "mdi:github",
     external: true,
   },
-  {
-    title: "Mail",
-    url: "mailto:tim@witzdam.com",
-    icon: "mdi:email",
-  },
+  
 ];
 
 // Home (/)
 export const homePageContent: HomePageContent = {
   seo: {
-    title: "Tim Witzdam",
+    title: "Juan David Peña",
     description:
-      "Full time student from Germany who loves building cool things using code.",
+      "Full time student ",
     image: identity.logo,
   },
-  role: "Student & Software Developer",
+  role: "Systems Engineering student",
   description:
-    "I'm Tim Witzdam, a full time student from Germany who also loves building cool things using code.",
+    "I'm Juan David.",
   socialLinks: socialLinks,
   links: [
     {
