@@ -4,11 +4,14 @@ import { getCollection, render, type CollectionEntry } from "astro:content";
 import { Image } from "astro:assets";
 import { identity } from "../../config";
 
+// Obligatorio en rutas dinámicas cuando haces build estático:
 export async function getStaticPaths() {
   const posts = await getCollection("posts");
 
   return posts.map((entry) => ({
-    params: { id: entry.slug }, // genera /blog/<slug>
+    // El archivo se llama [id].astro, por eso el param debe llamarse "id"
+    // En Content Collections, el "id" existe y se usa para construir URLs.
+    params: { id: entry.id },
     props: { entry },
   }));
 }
@@ -57,7 +60,9 @@ const { Content, remarkPluginFrontmatter } = await render(entry);
       class="apsect-video w-full rounded-xl mb-10"
     />
 
-    <article class="prose prose-invert prose-a:text-blue-300 prose-a:underline-offset-4 prose-headings:mb-2 prose-p:text-[#b3b3b3]">
+    <article
+      class="prose prose-invert prose-a:text-blue-300 prose-a:underline-offset-4 prose-headings:mb-2 prose-p:text-[#b3b3b3]"
+    >
       <Content />
     </article>
   </section>
