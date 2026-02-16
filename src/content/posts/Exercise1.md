@@ -12,8 +12,6 @@ image:
 
 ¿Cuántos empleados han pasado por más de un cargo en la compañía?
 
-<br>
-
 ## SQL
 
 ```sql
@@ -25,7 +23,8 @@ FROM    HR.JOB_HISTORY jh
 GROUP BY e.EMPLOYEE_ID, e.FIRST_NAME, e.LAST_NAME
 HAVING  COUNT(*) >= 2;
 ```
-<br>
+Esta es la primera línea<br>
+Esta es la segunda línea (pegada a la anterior)
 
 ## Porque
 
