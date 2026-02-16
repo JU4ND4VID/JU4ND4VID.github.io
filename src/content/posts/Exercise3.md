@@ -4,7 +4,7 @@ pubDate: 2026-02-12
 description: "Jerarquía organizacional de empleados con emails parcialmente ocultos"
 author: "JU4ND4VID"
 image:
-  url: "https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/img/hierarchical_query_pseudocolumns.gif"
+  url: "https://empreform.com/wp-content/uploads/2022/12/estructura-organizativa-jerarquia-empresarial-empresa-elementos-infograficos-redondos_129460-1912-1024x768.jpg"
   alt: "Diagrama de consultas jerárquicas Oracle"
 ---
 
