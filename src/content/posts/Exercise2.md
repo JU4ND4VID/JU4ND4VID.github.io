@@ -39,4 +39,4 @@ WHERE   r.REGION_NAME = 'Europe'
 <br>
 
 ## Porque
-Cada JOIN conecta las tablas paso a paso hasta llegar desde el empleado hasta saber en qué región está, para poder filtrar solo los de Europa con salario entre $4K-$6K.
+Cada JOIN conecta las tablas paso a paso hasta llegar desde el empleado hasta saber en qué región está, para poder filtrar solo los de Europa con salario entre $4K-$6K. NOTA : NO HAY EMPLEADOS CON LOS REQUERIMIENTOS
