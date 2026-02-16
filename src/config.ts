@@ -61,10 +61,10 @@ export const homePageContent: HomePageContent = {
 export const projectsPageContent: ProjectPageContent = {
   seo: {
     title: "Projects | Juan David Peña",
-    description: "Check out what I've been working on.",
+    description: "Proximamente",
     image: identity.logo,
   },
-  subtitle: "Check out what I've been working on.",
+  subtitle: "Proximamente",
   projects: [
   
   ],
