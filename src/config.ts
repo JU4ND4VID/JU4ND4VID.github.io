@@ -16,11 +16,11 @@ export const identity: Identity = {
 
 export const navBarLinks: NavBarLink[] = [
   {
-    title: "Home",
+    title: "Inicio",
     url: "/",
   },
   {
-    title: "Projects",
+    title: "Projectos",
     url: "/projects",
   },
   {
@@ -49,7 +49,7 @@ export const homePageContent: HomePageContent = {
   },
   role: "Estudiante de Ingeniería de Sistemas",
   description:
-    "I'm Juan David.",
+    "Hola, soy Juan David y este soy yo 👇🏼.",
   socialLinks: socialLinks,
   links: [
     
@@ -66,27 +66,7 @@ export const projectsPageContent: ProjectPageContent = {
   },
   subtitle: "Check out what I've been working on.",
   projects: [
-    {
-      title: "Project 1",
-      description: "Project 1 Description",
-      image: "/demo-2.jpg",
-      year: "2024",
-      url: "https://github.com/TimWitzdam",
-    },
-    {
-      title: "Project 1",
-      description: "Project 1 Description",
-      image: "/demo-2.jpg",
-      year: "2024",
-      url: "https://github.com/TimWitzdam",
-    },
-    {
-      title: "Project 1",
-      description: "Project 1 Description",
-      image: "/demo-2.jpg",
-      year: "2024",
-      url: "https://github.com/TimWitzdam",
-    },
+  
   ],
 };
 
