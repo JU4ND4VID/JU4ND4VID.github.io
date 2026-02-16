@@ -64,7 +64,7 @@ export const projectsPageContent: ProjectPageContent = {
     description: "Proximamente",
     image: identity.logo,
   },
-  subtitle: "Proximamente",
+  subtitle: "Próximamente",
   projects: [
   
   ],
