@@ -23,8 +23,8 @@ FROM    HR.JOB_HISTORY jh
 GROUP BY e.EMPLOYEE_ID, e.FIRST_NAME, e.LAST_NAME
 HAVING  COUNT(*) >= 2;
 ```
-Esta es la primera línea<br>
-Esta es la segunda línea (pegada a la anterior)
+<br>
+
 
 ## Porque
 
