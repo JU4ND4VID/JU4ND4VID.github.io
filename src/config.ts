@@ -24,7 +24,7 @@ export const navBarLinks: NavBarLink[] = [
     url: "/projects",
   },
   {
-    title: "SQL",
+    title: "Evidencias",
     url: "/blog",
   },
 ];
@@ -47,19 +47,12 @@ export const homePageContent: HomePageContent = {
       "Full time student ",
     image: identity.logo,
   },
-  role: "Systems Engineering student",
+  role: "Estudiante de Ingeniería de Sistemas",
   description:
     "I'm Juan David.",
   socialLinks: socialLinks,
   links: [
-    {
-      title: "My Projects",
-      url: "/projects",
-    },
-    {
-      title: "About Me",
-      url: "/about",
-    },
+    
   ],
 };
 
@@ -104,5 +97,5 @@ export const blogPageContent: BlogPageContent = {
     description: "Consultas",
     image: identity.logo,
   },
-  subtitle: "Thoughts, stories and ideas.",
+  subtitle: " SQL | PL/SQL Scripts | NoSQL",
 };
