@@ -26,26 +26,32 @@ FROM    HR.employees e
 START WITH e.manager_id IS NULL
 CONNECT BY PRIOR e.employee_id = e.manager_id
 ORDER SIBLINGS BY e.last_name;
+
 ```
 <br>
 
 ## Porque
-1. LEVEL (Pseudocolumna)
+1. LEVEL (Pseudocolumna)<br>
 Indica el nivel de profundidad en la jerarquía. El jefe principal tiene LEVEL = 1, sus reportes directos LEVEL = 2, y así sucesivamente. Es como contar cuántos "pisos" hay desde la raíz hasta cada empleado.
+<br>
 
-2. START WITH (Raíz del árbol)
+2. START WITH (Raíz del árbol)<br>
 Define dónde comienza la jerarquía. START WITH e.manager_id IS NULL busca al empleado sin jefe (el CEO o director general), que es la raíz del organigrama.
+<br>
 
-3. CONNECT BY PRIOR (Relación padre-hijo)
+3. CONNECT BY PRIOR (Relación padre-hijo)<br>
 Establece cómo conectar cada nivel con el siguiente. CONNECT BY PRIOR e.employee_id = e.manager_id significa: "conecta cada empleado con aquellos cuyo manager_id sea su employee_id" (encuentra a sus subordinados).
+<br>
 
-4. LPAD (Relleno a la izquierda)
+4. LPAD (Relleno a la izquierda)<br>
 LPAD(' ', (LEVEL - 1) * 2): Agrega espacios según el nivel para crear indentación visual (jerarquía)
 
 LPAD(SUBSTR(e.email, 1, 3), 9, '*'): Toma las primeras 3 letras del email y rellena con asteriscos a la izquierda hasta completar 9 caracteres (ej: ******JUA)
+<br>
 
-5. SUBSTR (Subcadena)
+5. SUBSTR (Subcadena)<br>
 SUBSTR(e.email, 1, 3) extrae los primeros 3 caracteres del email (posición 1 a 3).
+<br>
 
-6. ORDER SIBLINGS BY
+6. ORDER SIBLINGS BY<br>
 Ordena solo los empleados del mismo nivel jerárquico (hermanos) por apellido, sin romper la estructura de árbol.
