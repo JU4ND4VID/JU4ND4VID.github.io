@@ -1,0 +1,126 @@
+---
+title: "Retos PLSQL en Oracle COPIA DE HR"
+pubDate: 2026-03-01
+description: "Retos de clase"
+author: "JU4ND4VID"
+image:
+  url: "/PLSQL.jpg"
+  alt: "Creación de tablas e inserción de datos en Oracle"
+---
+import CodeDownloader from '../../components/DownloadCode.astro';
+
+## 1 Reto
+Crear 5000 empleados
+
+<CodeDownloader filename="crear5000Empleados.sql" codeId="reto1" />
+
+```sql reto1
+BEGIN
+   FOR i IN 1..500 LOOP
+      INSERT INTO EMPLOYEES (
+         EMPLOYEE_ID,
+         FIRST_NAME,
+         LAST_NAME,
+         EMAIL,
+         PHONE_NUMBER,
+         HIRE_DATE,
+         JOB_ID,
+         SALARY,
+         COMMISSION_PCT,
+         MANAGER_ID,
+         DEPARTMENT_ID
+      ) VALUES (
+         1000 + i,
+         
+         /* NOMBRE */
+         (SELECT nombre FROM (
+            SELECT 'Juan' nombre FROM dual UNION ALL
+            SELECT 'María' FROM dual UNION ALL
+            SELECT 'Carlos' FROM dual UNION ALL
+            SELECT 'Ana' FROM dual UNION ALL
+            SELECT 'Luis' FROM dual UNION ALL
+            SELECT 'Carmen' FROM dual UNION ALL
+            SELECT 'José' FROM dual UNION ALL
+            SELECT 'Laura' FROM dual UNION ALL
+            SELECT 'Miguel' FROM dual UNION ALL
+            SELECT 'Sofía' FROM dual UNION ALL
+            SELECT 'Jorge' FROM dual UNION ALL
+            SELECT 'Elena' FROM dual UNION ALL
+            SELECT 'Pedro' FROM dual UNION ALL
+            SELECT 'Lucía' FROM dual UNION ALL
+            SELECT 'Diego' FROM dual UNION ALL
+            SELECT 'Valentina' FROM dual UNION ALL
+            SELECT 'Andrés' FROM dual UNION ALL
+            SELECT 'Camila' FROM dual UNION ALL
+            SELECT 'Fernando' FROM dual UNION ALL
+            SELECT 'Daniela' FROM dual
+         ) ORDER BY DBMS_RANDOM.VALUE FETCH FIRST 1 ROWS ONLY),
+
+         /* APELLIDO */
+         (SELECT apellido FROM (
+            SELECT 'García' apellido FROM dual UNION ALL
+            SELECT 'Rodríguez' FROM dual UNION ALL
+            SELECT 'Martínez' FROM dual UNION ALL
+            SELECT 'López' FROM dual UNION ALL
+            SELECT 'Hernández' FROM dual UNION ALL
+            SELECT 'González' FROM dual UNION ALL
+            SELECT 'Pérez' FROM dual UNION ALL
+            SELECT 'Sánchez' FROM dual UNION ALL
+            SELECT 'Ramírez' FROM dual UNION ALL
+            SELECT 'Torres' FROM dual UNION ALL
+            SELECT 'Flores' FROM dual UNION ALL
+            SELECT 'Rivera' FROM dual UNION ALL
+            SELECT 'Gómez' FROM dual UNION ALL
+            SELECT 'Díaz' FROM dual UNION ALL
+            SELECT 'Cruz' FROM dual UNION ALL
+            SELECT 'Morales' FROM dual UNION ALL
+            SELECT 'Ortiz' FROM dual UNION ALL
+            SELECT 'Reyes' FROM dual UNION ALL
+            SELECT 'Vargas' FROM dual UNION ALL
+            SELECT 'Castillo' FROM dual
+         ) ORDER BY DBMS_RANDOM.VALUE FETCH FIRST 1 ROWS ONLY),
+
+         /* EMAIL */
+         'empleado' || i || '@empresa.com',
+
+         /* TELÉFONO */
+         '9' || TRUNC(DBMS_RANDOM.VALUE(10000000,99999999)),
+
+         /* FECHA CONTRATACIÓN */
+         TRUNC(SYSDATE - DBMS_RANDOM.VALUE(0, 3650)),
+
+         /* JOB */
+         CASE
+            WHEN MOD(i,5)=0 THEN 'IT_PROG'
+            WHEN MOD(i,5)=1 THEN 'SA_REP'
+            WHEN MOD(i,5)=2 THEN 'HR_REP'
+            WHEN MOD(i,5)=3 THEN 'MK_MAN'
+            ELSE 'FI_ACCOUNT'
+         END,
+
+         /* SALARIO */
+         ROUND(DBMS_RANDOM.VALUE(2500,18000),2),
+
+         /* COMISIÓN */
+         CASE
+            WHEN MOD(i,3)=0 THEN ROUND(DBMS_RANDOM.VALUE(0.05,0.25),2)
+            ELSE NULL
+         END,
+
+         /* MANAGER */
+         CASE
+            WHEN i <= 10 THEN NULL
+            ELSE 1000 + TRUNC(DBMS_RANDOM.VALUE(1, i))
+         END,
+
+         /* DEPARTAMENTO */
+         10 + MOD(i,5)*10
+      );
+   END LOOP;
+
+   COMMIT;
+END;
+/
+
+```
+

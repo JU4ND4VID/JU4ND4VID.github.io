@@ -48,6 +48,30 @@ const { seo } = Astro.props;
   });
 </script>
 
+<script>
+  document.querySelectorAll('.code-download-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const codeId = btn.getAttribute('data-code-id');
+      const filename = btn.getAttribute('data-filename');
+      if (!codeId || !filename) return;
+
+      const codeBlock = document.querySelector(`code.language-${codeId}, pre.${codeId} code, [class*="${codeId}"] code`) as HTMLElement;
+      const code = codeBlock?.innerText || '';
+      if (!code) return;
+
+      const blob = new Blob([code], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  });
+</script>
+
+
+
 <html lang="en">
   <head>
     <meta charset="UTF-8" />

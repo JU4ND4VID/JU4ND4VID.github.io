@@ -1,0 +1,24 @@
+---
+const { filename, codeId } = Astro.props;
+---
+
+<button class="code-download-btn" data-filename={filename} data-code-id={codeId}>
+  ⬇️ Descargar {filename}
+</button>
+
+<style>
+  .code-download-btn {
+    display: inline-flex;
+    padding: 0.5rem 1rem;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    cursor: pointer;
+    margin-bottom: 1rem;
+  }
+  .code-download-btn:hover {
+    background: #2563eb;
+  }
+</style>
