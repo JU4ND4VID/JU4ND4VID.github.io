@@ -51,12 +51,23 @@ const { seo } = Astro.props;
 <script>
   document.querySelectorAll('.code-download-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const codeId = btn.getAttribute('data-code-id');
       const filename = btn.getAttribute('data-filename');
-      if (!codeId || !filename) return;
+      if (!filename) return;
 
-      const codeBlock = document.querySelector(`code.language-${codeId}, pre.${codeId} code, [class*="${codeId}"] code`) as HTMLElement;
-      const code = codeBlock?.innerText || '';
+      // Busca el <pre> más cercano después del botón
+      let el: Element | null = btn;
+      let pre: Element | null = null;
+
+      while (el && !pre) {
+        let sibling = el.nextElementSibling;
+        while (sibling) {
+          if (sibling.tagName === 'PRE') { pre = sibling; break; }
+          sibling = sibling.nextElementSibling;
+        }
+        el = el.parentElement;
+      }
+
+      const code = (pre?.querySelector('code') as HTMLElement)?.innerText || '';
       if (!code) return;
 
       const blob = new Blob([code], { type: 'text/plain' });
@@ -69,6 +80,7 @@ const { seo } = Astro.props;
     });
   });
 </script>
+
 
 
 
