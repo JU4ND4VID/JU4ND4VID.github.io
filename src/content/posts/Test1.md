@@ -1,5 +1,5 @@
 ---
-title: "Test 1 PL/SQL en Oracle"
+title: "Conceptos basicos de PL/SQL en Oracle"
 pubDate: 2026-03-01
 description: "Conceptos del Test"
 author: "JU4ND4VID"
@@ -23,7 +23,6 @@ image:
 | `vn_`   | NUMBER   |
 | `vdo_`  | DOUBLE   |
 | `cn_`   | CONSTANT |
-
 
 <br>
 
@@ -107,11 +106,12 @@ END IF;
 ## Parámetros de Procedimientos
 
 <br>
+
 | Modo   | Dirección                        | Default si no se especifica |
 | ------ | -------------------------------- | --------------------------- |
-| IN     | Entrada (solo lectura)           | ✅ Sí, es el default         |
-| OUT    | Salida (el procedimiento asigna) | ❌                           |
-| IN OUT | Entrada y salida                 | ❌                           |
+| IN     | Entrada (solo lectura)           | ✅ Sí, es el default        |
+| OUT    | Salida (el procedimiento asigna) | ❌                          |
+| IN OUT | Entrada y salida                 | ❌                          |
 
 <br>
 
@@ -132,11 +132,10 @@ END sp_ejemplo;
 ## SQL Dinámico Nativo
 
 Orden obligatorio: primero INTO, luego USING
+
+INTO ← Entra al programa Captura resultado de SELECT
 <br>
-| Cláusula | Dirección | Uso |
-| -------- | ------------------- | ---------------------------- |
-| INTO | ← Entra al programa | Captura resultado de SELECT |
-| USING | → Sale hacia el SQL | Pasa valores a :placeholders |
+USING → Sale hacia el SQL Pasa valores a :placeholders
 
 <br>
 
@@ -159,11 +158,11 @@ Cuándo usar SQL dinámico
 | Nombre de columna/tabla variable | Concatenar + validar lista blanca |
 
 ```sql
--- ❌ NO funciona: columnas/tablas no son bind variables
+-- NO funciona: columnas/tablas no son bind variables
 vv_sql := 'SELECT :col FROM empleados';
 EXECUTE IMMEDIATE vv_sql USING 'nombre';
 
--- ✅ Correcto: validar y concatenar
+-- Correcto: validar y concatenar
 IF vv_col IN ('nombre','salario') THEN
     vv_sql := 'SELECT ' || vv_col || ' FROM empleados WHERE id = :x';
     EXECUTE IMMEDIATE vv_sql INTO vv_resultado USING vn_id;
