@@ -1,0 +1,127 @@
+---
+title: "Subprogramas en PL/SQL: Funciones, Triggers y Paquetes"
+pubDate: 2026-03-09
+description: "Teoría sobre subprogramas, funciones, triggers y paquetes en Oracle PL/SQL"
+author: "JU4ND4VID"
+image:
+  url: "/PLSQL.jpg"
+  alt: "Subprogramas en Oracle PL/SQL"
+---
+
+## Subprogramas
+
+Los subprogramas son bloques PL/SQL con nombre que pueden ser invocados desde otros bloques.
+Se dividen en **procedimientos** y **funciones**.
+
+- **Procedimiento:** Ejecuta una acción, no retorna un valor directamente.
+- **Función:** Ejecuta una acción y **retorna un valor**.
+
+---
+
+## Funciones
+
+```sql
+CREATE OR REPLACE FUNCTION calcularDivisas(p_monto IN NUMBER)
+RETURN NUMBER IS
+   v_resultado NUMBER;
+BEGIN
+   v_resultado := p_monto * 4200; -- ejemplo TRM
+   RETURN v_resultado;
+END calcularDivisas;
+/
+```
+
+Para invocarla:
+
+```sql
+SELECT calcularDivisas(100) FROM dual;
+```
+
+---
+
+## Triggers
+
+Un **trigger** es un bloque PL/SQL que se ejecuta automáticamente ante un evento DML (`INSERT`, `UPDATE`, `DELETE`) sobre una tabla.
+
+```sql
+CREATE OR REPLACE TRIGGER trg_ejemplo
+BEFORE INSERT ON EMPLOYEES
+FOR EACH ROW
+BEGIN
+   :NEW.HIRE_DATE := SYSDATE;
+END;
+/
+```
+
+> ⚠️ Los triggers no deben usarse para lógica de negocio pesada ni en bases de datos con procesos de gran volumen. Para esos casos se recomienda **Oracle APEX** u otras herramientas de capa de aplicación.
+
+---
+
+## Paquetes (Packages)
+
+Un paquete agrupa procedimientos, funciones, variables y cursores relacionados. Se compone de dos partes:
+
+### Especificación (SPEC)
+
+Define **qué** es público y visible desde afuera. Es la "interfaz" del paquete.
+
+```sql
+CREATE OR REPLACE PACKAGE pck_nomina AS
+   PROCEDURE calcularNomina(p_dept_id IN NUMBER);
+   FUNCTION calcularDivisas(p_monto IN NUMBER) RETURN NUMBER;
+END pck_nomina;
+/
+```
+
+### Cuerpo (BODY)
+
+Define **cómo** funciona cada elemento declarado en la especificación.
+
+```sql
+CREATE OR REPLACE PACKAGE BODY pck_nomina AS
+
+   PROCEDURE calcularNomina(p_dept_id IN NUMBER) IS
+   BEGIN
+      UPDATE EMPLOYEES
+      SET SALARY = SALARY * 1.05
+      WHERE DEPARTMENT_ID = p_dept_id;
+      COMMIT;
+   END calcularNomina;
+
+   FUNCTION calcularDivisas(p_monto IN NUMBER) RETURN NUMBER IS
+   BEGIN
+      RETURN p_monto * 4200;
+   END calcularDivisas;
+
+END pck_nomina;
+/
+```
+
+> 💡 Lo que se declara **dentro del BODY pero no en la SPEC** es privado — solo accesible internamente por el paquete.
+
+---
+
+## Permisos sobre objetos
+
+Para dar acceso a otros usuarios sobre una tabla o vista se usa `GRANT`:
+
+```sql
+GRANT SELECT, UPDATE, INSERT ON employees TO hr_user;
+```
+
+- Los permisos se otorgan por objeto y por usuario.
+- Se pueden revocar con `REVOKE`.
+
+---
+
+## Buenas prácticas
+
+- Nombrar paquetes con prefijo `pck_` → `pck_nomina`, `pck_ventas`.
+- No colocar lógica pesada dentro de triggers.
+- Separar siempre la especificación del body para facilitar el mantenimiento.
+- Usar **Oracle APEX** para la capa de presentación cuando la base de datos maneja grandes volúmenes.
+```
+
+***
+
+El nombre sugerido para el archivo sería algo como `teoria-subprogramas-plsql.mdx` dentro de tu carpeta `src/content/blog/`. ¿Necesitas ajustar algo antes de pegarlo?
