@@ -1,0 +1,209 @@
+---
+title: "Retos PLSQL en Oracle Nomina"
+pubDate: 2026-03-09
+description: "Retos de clase"
+author: "JU4ND4VID"
+image:
+  url: "/PLSQL.jpg"
+  alt: "Creación de tablas e inserción de datos en Oracle"
+---
+import CodeDownloader from '../../components/DownloadCode.astro';
+
+
+## 1 Reto
+Funcion para calcular la nomina
+
+
+<CodeDownloader filename="reto1_ex8.sql" codeId="reto1ex8" />
+
+
+```sql reto1ex8
+create or replace FUNCTION fn_resumenNomina (
+    param__periodo IN VARCHAR2
+) RETURN VARCHAR2 IS
+
+    -- Variables — fn_resumenNomina
+    vn_empleados  NUMBER;
+    vdo_devengado NUMBER(14,2);
+    vdo_deduc     NUMBER(14,2);
+    vdo_neto      NUMBER(14,2);
+
+BEGIN
+    -- Validar parámetro — fn_resumenNomina
+    IF param__periodo IS NULL THEN
+        RETURN 'ERROR: El período es obligatorio.';
+    END IF;
+
+    -- Obtener resumen del período indicado — fn_resumenNomina
+    SELECT COUNT(ps.payslip_id),
+           SUM(ps.gross_total),
+           SUM(ps.ded_total),
+           SUM(ps.net_total)
+    INTO   vn_empleados, vdo_devengado, vdo_deduc, vdo_neto
+    FROM   pay_payslips     ps
+    JOIN   pay_periods       p  ON p.period_id       = ps.period_id
+    JOIN   pay_payroll_types pt ON pt.payroll_type_id = p.payroll_type_id
+    WHERE  pt.code       = 'MENSUAL'
+      AND  p.period_code = param__periodo;
+
+    -- Validar que encontró datos — fn_resumenNomina
+    IF vn_empleados = 0 THEN
+        RETURN 'ERROR: Sin nómina para el período ' || param__periodo;
+    END IF;
+
+    -- Imprimir resumen — fn_resumenNomina
+    DBMS_OUTPUT.PUT_LINE('==========================================');
+    DBMS_OUTPUT.PUT_LINE('RESUMEN NÓMINA — Período: ' || param__periodo);
+    DBMS_OUTPUT.PUT_LINE('------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('Empleados  : ' || vn_empleados);
+    DBMS_OUTPUT.PUT_LINE('Devengado  : ' || TO_CHAR(vdo_devengado, '999,999,999.99'));
+    DBMS_OUTPUT.PUT_LINE('Deducciones: ' || TO_CHAR(vdo_deduc,     '999,999,999.99'));
+    DBMS_OUTPUT.PUT_LINE('NETO TOTAL : ' || TO_CHAR(vdo_neto,      '999,999,999.99'));
+    DBMS_OUTPUT.PUT_LINE('Promedio   : ' || TO_CHAR(ROUND(vdo_neto / vn_empleados, 2), '999,999.99'));
+    DBMS_OUTPUT.PUT_LINE('==========================================');
+
+    RETURN 'OK';
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'ERROR: ' || SQLERRM;
+END fn_resumenNomina;
+
+```
+
+Nomina por empleado especifico.
+
+<CodeDownloader filename="reto2_ex8.sql" codeId="reto2ex8" />
+
+
+```sql reto2ex8
+create or replace FUNCTION fn_nominaEmpleado (
+    param__employeeId IN NUMBER
+) RETURN VARCHAR2 IS
+
+    -- Variables — fn_nominaEmpleado
+    vv_nombre  VARCHAR2(100);
+    vv_depto   VARCHAR2(100);
+    vdo_bruto  NUMBER(14,2);
+    vdo_deduc  NUMBER(14,2);
+    vdo_neto   NUMBER(14,2);
+    vv_nivel   VARCHAR2(20);
+    vv_periodo VARCHAR2(20);
+
+BEGIN
+    -- Validar parámetro — fn_nominaEmpleado
+    IF param__employeeId IS NULL THEN
+        RETURN 'ERROR: employee_id es obligatorio.';
+    END IF;
+
+    -- Obtener último período y nómina del empleado — fn_nominaEmpleado
+
+        BEGIN
+            SELECT e.first_name || ' ' || e.last_name,
+                   NVL(d.department_name, 'Sin depto'),  -- ✅ protege NULL
+                   ps.gross_total,
+                   ps.ded_total,
+                   ps.net_total,
+                   p.period_code
+            INTO   vv_nombre, vv_depto,
+                   vdo_bruto, vdo_deduc, vdo_neto,
+                   vv_periodo
+            FROM   pay_payslips      ps
+            JOIN   employees          e   ON e.employee_id      = ps.employee_id
+            LEFT JOIN departments     d   ON d.department_id    = e.department_id  -- ✅ LEFT JOIN
+            JOIN   pay_periods         p   ON p.period_id        = ps.period_id
+            JOIN   pay_payroll_types   pt  ON pt.payroll_type_id = p.payroll_type_id
+            WHERE  ps.employee_id = param__employeeId
+              AND  pt.code        = 'MENSUAL'
+              AND  p.period_id    = (
+                       SELECT MAX(p2.period_id)
+                       FROM   pay_periods       p2
+                       JOIN   pay_payroll_types pt2 ON pt2.payroll_type_id = p2.payroll_type_id
+                       WHERE  pt2.code = 'MENSUAL'
+                   );
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                RETURN 'ERROR: Sin nómina para empleado ' || param__employeeId;
+        END;
+
+
+    -- Nivel salarial — fn_nominaEmpleado
+    vv_nivel := CASE
+                    WHEN vdo_neto >= 15000 THEN 'SENIOR'
+                    WHEN vdo_neto >= 10000 THEN 'MEDIO'
+                    WHEN vdo_neto >=  5000 THEN 'JUNIOR'
+                    ELSE                        'BÁSICO'
+                END;
+
+    -- Imprimir resultado — fn_nominaEmpleado
+    DBMS_OUTPUT.PUT_LINE('==========================================');
+    DBMS_OUTPUT.PUT_LINE('Período  : ' || vv_periodo);
+    DBMS_OUTPUT.PUT_LINE('Empleado : ' || vv_nombre);
+    DBMS_OUTPUT.PUT_LINE('Depto    : ' || vv_depto);
+    DBMS_OUTPUT.PUT_LINE('Nivel    : ' || vv_nivel);
+    DBMS_OUTPUT.PUT_LINE('------------------------------------------');
+    DBMS_OUTPUT.PUT_LINE('Devengado: ' || TO_CHAR(vdo_bruto, '999,999.99'));
+    DBMS_OUTPUT.PUT_LINE('Deduc.   : ' || TO_CHAR(vdo_deduc, '999,999.99'));
+    DBMS_OUTPUT.PUT_LINE('NETO     : ' || TO_CHAR(vdo_neto,  '999,999.99'));
+    DBMS_OUTPUT.PUT_LINE('==========================================');
+
+    RETURN 'OK';
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'ERROR: ' || SQLERRM;
+END fn_nominaEmpleado;
+
+```
+
+
+
+## Cómo Ejecutarlos
+A diferencia del sp_, la función se puede llamar de tres formas:
+
+```sql
+
+-- Opción 1: desde bloque anónimo (equivalente al sp_ anterior)
+SET SERVEROUTPUT ON;
+DECLARE
+    vv_resultado VARCHAR2(200);
+BEGIN
+    vv_resultado := fn_resumenNomina('2026-03');
+    DBMS_OUTPUT.PUT_LINE('Estado: ' || vv_resultado);
+END;
+/
+
+-- Opción 2: directamente en SELECT (ventaja exclusiva de fn_)
+SELECT fn_resumenNomina('2026-03') AS resultado FROM DUAL;
+
+-- Opción 3: dentro de otro procedimiento o función
+IF fn_resumenNomina(param__periodo) != 'OK' THEN
+    -- manejar error
+END IF;
+
+```
+
+⚠️ Nota importante: DBMS_OUTPUT dentro de una función funciona en bloques anónimos, pero no se verá si la llamas desde un SELECT. Si necesitas el resumen impreso siempre, considera mantener el sp_ para ejecución directa y usar la fn_ solo cuando requieras el valor de retorno en SQL
+
+```sql
+
+
+SET SERVEROUTPUT ON;
+DECLARE
+    vv_resultado VARCHAR2(200);
+BEGIN
+    vv_resultado := fn_nominaEmpleado(5178);
+    DBMS_OUTPUT.PUT_LINE('Estado: ' || vv_resultado);
+END;
+/
+
+
+SELECT fn_nominaEmpleado(5178) AS resultado FROM DUAL;
+
+
+IF fn_nominaEmpleado(param__employeeId) != 'OK' THEN
+    RETURN 'ERROR: No se pudo obtener nómina del empleado.';
+END IF;
+
+
+```
