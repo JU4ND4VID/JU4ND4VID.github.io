@@ -64,9 +64,16 @@ export const projectsPageContent: ProjectPageContent = {
     description: "Proximamente",
     image: identity.logo,
   },
-  subtitle: "Próximamente",
+  subtitle: "Proyectos académicos y personales",
   projects: [
-  
+    {
+      title: "FutbolTrack",
+      description: "Proyecto académico desarrollado en el curso de Bases de Datos II, por Nicolas Matheus, Juan Moreno y Juan Peña.",
+      image: "/logoProyecto.png",
+      year: "2026",
+      repoUrl: "https://github.com/JU4ND4VID/futboltrack",
+      docsUrl: "https://unbosqueeduco-my.sharepoint.com/:f:/g/personal/nmatheus_unbosque_edu_co/IgD4ebN0j655SISehuYUb9WiAWudvwxR_Td3r3pwKmqkzc8?e=oHiZba",
+    },
   ],
 };
 

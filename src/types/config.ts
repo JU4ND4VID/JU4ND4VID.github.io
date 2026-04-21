@@ -74,7 +74,9 @@ export type Project = {
   description: string;
   image: string;
   year: string;
-  url: string;
+  url?: string;        // ya existía, hazla opcional
+  repoUrl?: string;    // ← nuevo
+  docsUrl?: string; 
 };
 
 export type ProjectPageContent = {
