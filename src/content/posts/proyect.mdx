@@ -1,0 +1,373 @@
+---
+title: "Patrones NoSQL aplicados a FutbolTrack"
+pubDate: 2026-05-04
+description: "Aplicación de patrones de diseño en MongoDB para sesiones de entrenamiento, estadísticas y observaciones en un sistema deportivo"
+author: "JU4ND4VID"
+image:
+  url: "https://webassets.mongodb.com/_com_assets/cms/patternsmatrix-xv1kqjlrpb.png"
+  alt: "Patrones de diseño NoSQL aplicados a FutbolTrack"
+---
+
+## Introducción
+
+Cuando se diseña una solución híbrida entre MySQL y MongoDB, no conviene copiar el modelo relacional tal como está. En lugar de pensar en tablas, claves foráneas y JOINs como en SQL, en MongoDB se modela según el patrón de acceso: qué datos se consultan juntos, cuáles cambian poco, cuáles requieren flexibilidad y cuáles deben responder rápido en lectura.
+
+En el caso de **FutbolTrack**, el modelo gira alrededor de tres colecciones principales:
+
+- `planes_sesion`
+- `estadisticas_jugador`
+- `observaciones_sesion`
+
+Estas colecciones se conectan con datos que siguen existiendo en MySQL, especialmente mediante `id_entrenamiento`, pero MongoDB se usa para manejar contenido semiestructurado, lecturas rápidas y estructuras más adaptables para el trabajo de cancha, análisis y seguimiento deportivo.
+
+---
+
+## De SQL a NoSQL
+
+En un modelo SQL tradicional, probablemente existirían tablas separadas para:
+
+- entrenamientos,
+- planes de sesión,
+- estadísticas por jugador,
+- observaciones de la sesión.
+
+Luego, para construir una vista completa, sería necesario hacer varios `JOIN`. Ese enfoque funciona bien en bases de datos relacionales, pero en MongoDB el objetivo cambia: se prioriza que los datos más consultados estén cerca dentro del mismo documento.
+
+Eso implica varias decisiones de diseño:
+
+- Embeber información cuando siempre se consulta junta.
+- Mantener referencias cuando el dato principal vive en otro sistema.
+- Duplicar algunos campos de forma controlada si eso mejora el rendimiento.
+- Diseñar arreglos y subdocumentos según la lógica del negocio, no según una estructura tabular.
+
+Por eso, en FutbolTrack tienen sentido patrones como **Extended Reference**, **Bucket**, **Polymorphic**, **Computed** y **Schema Versioning**.
+
+---
+
+## Contexto del proyecto
+
+Analizando el caso de uso de FutbolTrack, el proyecto encaja claramente en tres categorías funcionales:
+
+| Categoría | Por qué aplica a FutbolTrack |
+|----------|-------------------------------|
+| Content Management | Porque maneja planes de sesión y observaciones, que son contenidos estructurados creados y editados por usuarios. |
+| Mobile | Porque el frontend se usa como app web desde el celular, incluso en la cancha. |
+| Real-Time Analytics | Porque procesa estadísticas de jugadores, asistencia y rendimiento por sesión. |
+
+Al cruzar estas categorías con la matriz de uso de patrones, se justifican especialmente los siguientes:
+
+| Patrón | Justificación por categoría |
+|--------|-----------------------------|
+| Computed | Content Management + Mobile + Real-Time Analytics |
+| Schema Versioning | Content Management + Mobile + Real-Time Analytics |
+| Bucket | Real-Time Analytics, especialmente para agrupar estadísticas por sesión |
+| Extended Reference | Mobile, porque reduce dependencias al consultar datos híbridos MySQL + MongoDB |
+| Polymorphic | Content Management + Mobile, por la estructura variable de los bloques de entrenamiento |
+
+Esto confirma que los patrones elegidos no solo son técnicamente válidos, sino que también están alineados con el tipo de producto que es FutbolTrack.
+
+---
+
+## 1. Extended Reference Pattern
+
+### ¿Qué es?
+
+El **Extended Reference Pattern** consiste en guardar una referencia al dato principal, pero además incluir algunos campos importantes de ese registro dentro del documento MongoDB.
+
+No se guarda únicamente el `id_entrenamiento`, sino también un pequeño snapshot con la información que normalmente se necesita mostrar junto con el plan o la observación.
+
+### ¿Dónde aplicarlo?
+
+- `planes_sesion`
+- `observaciones_sesion`
+
+### Ejemplo
+
+```json
+{
+  "_id": ObjectId("..."),
+  "schema_version": 1,
+  "id_entrenamiento": 7,
+  "snapshot_entrenamiento": {
+    "fecha": "2026-06-15",
+    "categoria": "Sub-12",
+    "lugar": "Cancha Principal"
+  },
+  "calentamiento": "Trote suave 10 min",
+  "bloques": []
+}
+```
+
+### ¿Qué hace cada parte?
+
+- **`_id`**: Identificador único del documento en MongoDB.
+- **`schema_version`**: Número de versión del esquema del documento.
+- **`id_entrenamiento`**: Referencia al entrenamiento cuyo dato completo sigue en MySQL.
+- **`snapshot_entrenamiento`**: Copia parcial de datos clave del entrenamiento.
+- **`calentamiento`**: Información general de la sesión.
+- **`bloques`**: Lista de subdocumentos con el contenido del entrenamiento.
+
+### ¿Por qué usarlo?
+
+Si el entrenador abre el plan desde el celular y el sistema necesita consultar MongoDB y luego MySQL para obtener fecha, categoría y lugar, el flujo se vuelve más costoso y más lento. Este patrón reduce esa dependencia y hace que el documento sea más útil por sí solo.
+
+### Ventaja principal
+
+Disminuye la necesidad de combinar datos entre tecnologías distintas y mejora la lectura en escenarios móviles.
+
+---
+
+## 2. Bucket Pattern
+
+### ¿Qué es?
+
+El **Bucket Pattern** agrupa muchos elementos relacionados dentro de un solo documento, en lugar de crear un documento independiente para cada uno.
+
+### ¿Dónde aplicarlo?
+
+En `estadisticas_jugador`, aunque estructuralmente sería más claro renombrarla como `estadisticas_sesion`.
+
+### Problema sin el patrón
+
+Si se almacena un documento por jugador por sesión, una sola jornada con 15 jugadores produce 15 documentos. Luego, para mostrar el resumen de la sesión, habría que recuperar y recorrer todos esos registros.
+
+### Solución con Bucket Pattern
+
+```json
+{
+  "_id": ObjectId("..."),
+  "schema_version": 1,
+  "id_entrenamiento": 7,
+  "fecha": "2026-06-15",
+  "categoria": "Sub-12",
+  "count": 10,
+  "jugadores": [
+    {
+      "cedula": "1006748391",
+      "nombre": "Carlos Pérez",
+      "distancia_km": 7.2,
+      "sprints": 15,
+      "nota": 8
+    },
+    {
+      "cedula": "1007123456",
+      "nombre": "Luis Gómez",
+      "distancia_km": 6.8,
+      "sprints": 12,
+      "nota": 7
+    }
+  ]
+}
+```
+
+### ¿Qué hace cada parte?
+
+- **`id_entrenamiento`**: Relaciona el documento con una sesión específica.
+- **`fecha` y `categoria`**: Ayudan a identificar rápidamente la sesión.
+- **`count`**: Cantidad total de jugadores almacenados en el documento.
+- **`jugadores`**: Arreglo con las estadísticas individuales.
+
+### ¿Por qué funciona aquí?
+
+Porque una categoría de formación no suele tener cientos de jugadores. Al haber un máximo aproximado de 15 a 20, el tamaño del arreglo sigue siendo razonable y controlado.
+
+### Ventaja principal
+
+Permite consultar toda la estadística de una sesión con una sola lectura, algo ideal para escenarios de análisis rápido.
+
+---
+
+## 3. Polymorphic Pattern
+
+### ¿Qué es?
+
+El **Polymorphic Pattern** permite que distintos elementos dentro de una misma colección o arreglo tengan estructuras diferentes según su tipo.
+
+### ¿Dónde aplicarlo?
+
+En `planes_sesion`, específicamente dentro del arreglo `bloques`.
+
+### ¿Por qué es útil?
+
+Porque los bloques de entrenamiento no son todos iguales. Algunos son técnicos, otros físicos, otros tácticos o de partido. Cada uno necesita atributos propios.
+
+### Ejemplo
+
+```json
+{
+  "bloques": [
+    {
+      "tipo": "tecnico",
+      "nombre": "Conducción",
+      "duracion_min": 20,
+      "ejercicios": ["Slalom con conos", "Pase y recepción"]
+    },
+    {
+      "tipo": "fisico",
+      "nombre": "Fuerza tren inferior",
+      "duracion_min": 15,
+      "series": 3,
+      "repeticiones": 12
+    },
+    {
+      "tipo": "partido",
+      "nombre": "4v4 en espacio reducido",
+      "duracion_min": 25,
+      "formato": "4v4",
+      "campo_metros": "20x30"
+    }
+  ]
+}
+```
+
+### ¿Qué hace cada parte?
+
+- **`tipo`**: Define qué clase de bloque es.
+- **`nombre`**: Identifica la actividad.
+- **`duracion_min`**: Tiempo del bloque.
+- Luego, cada tipo agrega sus propios campos:
+  - **`ejercicios`** para un bloque técnico.
+  - **`series` y `repeticiones`** para uno físico.
+  - **`formato` y `campo_metros`** para uno de partido.
+
+### ¿Por qué no modelarlo como tabla rígida?
+
+Porque eso obligaría a crear muchas columnas que quedarían vacías según el tipo de bloque. En MongoDB se aprovecha la flexibilidad documental para guardar exactamente lo necesario en cada caso.
+
+### Ventaja principal
+
+Permite representar contenido variable sin desperdiciar estructura ni llenar el modelo de campos nulos.
+
+---
+
+## 4. Computed Pattern
+
+### ¿Qué es?
+
+El **Computed Pattern** guarda dentro del documento ciertos valores ya calculados, para no tener que procesarlos cada vez que alguien consulta la información.
+
+### ¿Dónde aplicarlo?
+
+En el documento de estadísticas de sesión o en la información usada por el dashboard.
+
+### Ejemplo
+
+```json
+{
+  "id_entrenamiento": 7,
+  "resumen_computado": {
+    "promedio_nota_sesion": 7.4,
+    "total_distancia_equipo_km": 68.5,
+    "jugador_destacado": "1006748391",
+    "jugadores_bajo_rendimiento": ["1009876543"]
+  },
+  "jugadores": []
+}
+```
+
+### ¿Qué hace cada parte?
+
+- **`promedio_nota_sesion`**: Resume el rendimiento general del grupo.
+- **`total_distancia_equipo_km`**: Acumula toda la distancia recorrida.
+- **`jugador_destacado`**: Identifica al jugador con mejor rendimiento.
+- **`jugadores_bajo_rendimiento`**: Lista de jugadores que requieren atención.
+
+### ¿Por qué usarlo?
+
+Porque cuando el entrenador abre el dashboard desde el celular, necesita respuestas rápidas. Si cada consulta obliga a recorrer todo el arreglo `jugadores` para recalcular promedios, rankings o acumulados, el sistema hace trabajo repetido.
+
+### Ventaja principal
+
+Optimiza lecturas frecuentes y encaja perfectamente con analítica en tiempo real y dashboards móviles.
+
+---
+
+## 5. Schema Versioning Pattern
+
+### ¿Qué es?
+
+El **Schema Versioning Pattern** consiste en guardar dentro de cada documento un número de versión que indique con qué estructura fue creado.
+
+### ¿Dónde aplicarlo?
+
+En las tres colecciones:
+
+- `planes_sesion`
+- `estadisticas_sesion`
+- `observaciones_sesion`
+
+### Ejemplo
+
+```json
+{
+  "_id": ObjectId("..."),
+  "schema_version": 1,
+  "id_entrenamiento": 7
+}
+```
+
+### ¿Qué hace cada parte?
+
+- **`schema_version`**: Marca la versión actual del documento.
+- Ayuda a distinguir documentos viejos de documentos actualizados si el modelo cambia con el tiempo.
+
+### ¿Por qué es importante?
+
+Porque FutbolTrack es un proyecto que puede crecer durante el curso o incluso después. Tal vez luego necesiten agregar nuevos campos, cambiar la estructura de observaciones o enriquecer estadísticas. Si todos los documentos tienen versión, será mucho más fácil migrarlos o tratarlos de forma diferenciada.
+
+### Ventaja principal
+
+Da control sobre la evolución del esquema sin perder compatibilidad con documentos antiguos.
+
+---
+
+## Aplicación por colección
+
+### `planes_sesion`
+Patrones recomendados:
+
+- **Extended Reference**
+- **Polymorphic**
+- **Schema Versioning**
+
+### `estadisticas_jugador` → recomendable renombrar a `estadisticas_sesion`
+Patrones recomendados:
+
+- **Bucket**
+- **Computed**
+- **Schema Versioning**
+
+### `observaciones_sesion`
+Patrones recomendados:
+
+- **Extended Reference**
+- **Schema Versioning**
+
+---
+
+## Patrones que no son necesarios
+
+No todos los patrones del libro son útiles para FutbolTrack. Algunos simplemente no responden a problemas reales del modelo actual.
+
+- **Tree Pattern**: No hay jerarquías complejas como árboles de categorías o subcategorías.
+- **Outlier Pattern**: Los arreglos son pequeños y están controlados; no hay casos extremos de crecimiento.
+- **Subset Pattern**: No se manejan documentos gigantes con cientos de campos opcionales.
+
+Esto demuestra algo importante en NoSQL: un buen diseño no consiste en usar muchos patrones, sino en elegir solo los que realmente resuelven necesidades concretas.
+
+---
+
+## Conclusión técnica
+
+FutbolTrack encaja muy bien en una arquitectura híbrida donde MySQL sigue siendo la fuente principal de verdad para la parte transaccional, mientras MongoDB se usa como soporte documental para contenido flexible, estadísticas de lectura rápida y estructuras adaptadas al trabajo deportivo.
+
+Además, la matriz de uso confirma que los patrones seleccionados están bien justificados por el tipo de aplicación que representa el proyecto: gestión de contenido, uso móvil y analítica en tiempo casi real.
+
+La idea central no es traducir SQL a MongoDB de forma literal, sino rediseñar el modelo pensando en cómo se usa el sistema:
+
+- qué datos se leen juntos,
+- qué cálculos deben estar listos,
+- qué partes requieren flexibilidad,
+- y qué información conviene conservar como snapshot.
+
+Bajo esa lógica, **Extended Reference**, **Bucket**, **Polymorphic**, **Computed** y **Schema Versioning** no solo son válidos, sino especialmente adecuados para FutbolTrack.
