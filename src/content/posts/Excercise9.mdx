@@ -1,0 +1,82 @@
+---
+title: "Introducción a MongoDB: De SQL a NoSQL"
+pubDate: 2026-05-04
+description: "Conceptos básicos de NoSQL, documentos y agregaciones en MongoDB"
+author: "JU4ND4VID"
+image:
+  url: "/mongo.png"
+  alt: "Conceptos de bases de datos orientadas a documentos"
+---
+
+## De SQL a NoSQL: Cambio de Mentalidad
+
+A diferencia de las bases de datos relacionales (RDBMS) que usas en Oracle, en NoSQL (específicamente MongoDB) dejamos de lado las tablas y las relaciones estrictas.
+
+- **Documentos (BSON):** En lugar de filas, almacenamos documentos, que son objetos flexibles y anidados.
+- **Colecciones:** Agrupan documentos relacionados (equivalente a las tablas en SQL).
+- **Esquema Flexible:** No necesitas definir tipos de datos estrictos para cada campo de antemano.
+
+
+---
+
+## Análisis de Consultas: Filtrado y Agregación
+
+Para entender cómo extraer información en un entorno documental, veamos ejemplos prácticos usando una base de datos de Airbnb.
+
+### 1. Filtrado básico (`find`)
+Esta consulta busca documentos donde el mercado sea "Porto" y el lugar tenga al menos 5 años de antigüedad.
+
+```javascript
+db.listingsAndReviews.find({
+  "address.market": { $eq: "Porto" },
+  "first_review": { $lte: new ISODate("2021-04-29") }
+});
+```
+
+*   **`address.market`**: Accedemos a un campo anidado usando la notación de punto.
+*   **`$eq`**: Operador de igualdad.
+*   **`$lte`**: Operador "menor o igual que" (*Less Than or Equal*).
+
+---
+
+### 2. Agregación avanzada (`aggregate`)
+Cuando necesitamos procesar y calcular datos, usamos el **Pipeline de Agregación**. Es como una línea de montaje donde los documentos pasan por varias etapas:
+
+```javascript
+db.listingsAndReviews.aggregate([
+  {
+    // Etapa 1: Filtrar (Match)
+    $match: {
+      $and: [
+        { "address.market": { $eq: "Porto" } },
+        { "property_type": { $eq: "Apartment" } },
+        { "amenities": { $all: ["Wifi", "Cable TV"] } }
+      ]
+    }
+  },
+  {
+    // Etapa 2: Agrupar y Calcular (Group)
+    $group: {
+      _id: null, // Agrupamos todo el resultado en un solo objeto
+      total_price: { $sum: "$price" },
+      total_camas: { $sum: "$beds" }
+    }
+  },
+  {
+    // Etapa 3: Formatear salida (Project)
+    $project: {
+      _id: 0,
+      total_price: 1,
+      total_camas: 1
+    }
+  }
+]);
+```
+
+#### Explicación de las etapas:
+
+1.  **`$match`**: Actúa como el `WHERE` en SQL. Filtra los documentos que cumplen con las condiciones. El operador `$all` dentro de las amenidades asegura que el arreglo contenga **ambos** elementos requeridos.
+2.  **`$group`**: Actúa como las funciones de agregación (`SUM`, `AVG`). Aquí sumamos el `price` y las `beds` de todos los documentos que pasaron el filtro. Al usar `_id: null`, le indicamos que agrupe todos los resultados en un único documento de salida.
+3.  **`$project`**: Define qué campos mostrar. Al establecer `_id: 0`, ocultamos el identificador del documento, dejando solo nuestras métricas calculadas en el resultado final.
+
+Este enfoque de *pipeline* permite transformar, filtrar y dar forma a los datos en un solo flujo de trabajo eficiente y altamente legible.
