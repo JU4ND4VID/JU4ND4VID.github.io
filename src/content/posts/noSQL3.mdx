@@ -1,0 +1,142 @@
+---
+title: "Consultas Básicas con find en MongoDB"
+pubDate: 2026-05-10
+description: "Operadores $gt, $lt, $in y búsqueda en arrays — ejercicios 6, 8, 10 y 12"
+author: "JU4ND4VID"
+image:
+  url: "/mongo.png"
+  alt: "Consultas básicas con find en MongoDB"
+---
+
+## Estructura del find
+
+```javascript
+db.coleccion.find({ filtro }, { proyeccion })
+```
+
+- **filtro** — qué documentos quiero (equivale al WHERE en SQL)
+- **proyeccion** — qué campos mostrar (equivale al SELECT en SQL)
+
+> **Regla:** cuando uses dot notation para campos anidados, el campo siempre va entre comillas dobles: `"address.country"`.
+
+---
+
+## Ejercicio 6 — find por País
+
+Consultar el `name` y `price` de todos los listings ubicados en Brazil.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.find(
+  { "address.country": "Brazil" },
+  { name: 1, price: 1, _id: 0 }
+)
+```
+
+### ¿Qué aprendemos aquí?
+
+- `"address.country"` usa dot notation para acceder a un campo dentro de un documento embebido
+- En la proyección `1` incluye el campo y `0` lo excluye
+- `_id` siempre se incluye por defecto — hay que excluirlo explícitamente con `_id: 0`
+
+### Error común
+
+```javascript
+// MAL — sin comillas en dot notation
+{ address.country: "Brazil" }
+
+// BIEN
+{ "address.country": "Brazil" }
+```
+
+---
+
+## Ejercicio 8 — find con $lt (Menor que)
+
+Encontrar los listings cuyo `price` sea menor a $75.00, proyectando `name`, `price` y `property_type`.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.find(
+  { price: { $lt: 75 } },
+  { name: 1, price: 1, property_type: 1, _id: 0 }
+)
+```
+
+### ¿Qué aprendemos aquí?
+
+- `$lt` es menor que estricto — no incluye el valor límite
+- `$lte` sería menor o igual — incluye el valor límite
+- Todos los operadores van dentro del campo como `{ campo: { $operador: valor } }`
+
+### Tabla de operadores de comparación
+
+| Operador | Significado | Ejemplo |
+|---|---|---|
+| `$gt` | mayor que | `{ price: { $gt: 100 } }` |
+| `$gte` | mayor o igual | `{ price: { $gte: 100 } }` |
+| `$lt` | menor que | `{ price: { $lt: 75 } }` |
+| `$lte` | menor o igual | `{ price: { $lte: 75 } }` |
+| `$eq` | igual a | `{ price: { $eq: 50 } }` |
+| `$ne` | distinto de | `{ price: { $ne: 50 } }` |
+
+---
+
+## Ejercicio 10 — find con $in
+
+Encontrar listings cuyo `property_type` sea "House" o "Condominium".
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.find(
+  { property_type: { $in: ["House", "Condominium"] } }
+)
+```
+
+### ¿Qué aprendemos aquí?
+
+- `$in` verifica si el valor del campo está dentro de una lista
+- Es equivalente a `WHERE property_type IN ('House', 'Condominium')` en SQL
+- `$nin` es el opuesto — el valor NO debe estar en la lista
+
+### Error común
+
+```javascript
+// MAL — $in fuera del campo
+{ $in property_type: ["House", "Condominium"] }
+
+// BIEN — $in dentro del campo
+{ property_type: { $in: ["House", "Condominium"] } }
+```
+
+---
+
+## Ejercicio 12 — find en Array
+
+Encontrar listings que ofrezcan "Heating" como una de sus amenities.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.find(
+  { amenities: "Heating" }
+)
+```
+
+### ¿Qué aprendemos aquí?
+
+- MongoDB busca automáticamente dentro del array — no necesitas operador especial para un solo valor
+- `$all` se usa cuando quieres que el array contenga **varios valores a la vez**
+- `$in` se usa cuando quieres que el array contenga **al menos uno** de varios valores
+
+### Cuándo usar cada operador de array
+
+| Caso | Operador | Ejemplo |
+|---|---|---|
+| Buscar un valor en array | directo | `{ amenities: "Heating" }` |
+| El array debe tener todos | `$all` | `{ amenities: { $all: ["Wifi", "Heating"] } }` |
+| El array tiene alguno de estos | `$in` | `{ amenities: { $in: ["Wifi", "Heating"] } }` |
+| Tamaño exacto del array | `$size` | `{ amenities: { $size: 20 } }` |

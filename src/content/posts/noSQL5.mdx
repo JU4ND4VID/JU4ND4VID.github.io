@@ -1,0 +1,153 @@
+---
+title: "Actualización de Documentos en MongoDB"
+pubDate: 2026-05-10
+description: "updateOne, updateMany, $set, $inc y upsert — ejercicios 16, 18 y 20"
+author: "JU4ND4VID"
+image:
+  url: "/mongo.png"
+  alt: "Actualización de documentos en MongoDB"
+---
+
+## Estructura de las actualizaciones
+
+Las actualizaciones en MongoDB requieren dos partes: un **filtro** (qué documento modificar) y un **operador** (qué cambiar).
+
+```javascript
+db.coleccion.updateOne(
+  { filtro },                    // qué documento buscar
+  { $operador: { campo: valor } } // qué cambiar
+)
+```
+
+> **Importante:** Si el documento no existe y no usas `upsert: true`, el update simplemente no hace nada — retorna `matchedCount: 0` sin lanzar error.
+
+---
+
+## Ejercicio 16 — updateOne Simple
+
+Actualizar el `property_type` del listing "Cozy Cabin Retreat" a "Entire home/apt".
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.updateOne(
+  { name: "Cozy Cabin Retreat" },
+  { $set: { property_type: "Entire home/apt" } }
+)
+```
+
+### ¿Qué aprendemos aquí?
+
+- `$set` asigna o actualiza un campo sin tocar el resto del documento
+- El filtro busca el documento por `name`
+- Si el documento no existe previamente, el resultado es `matchedCount: 0, modifiedCount: 0`
+
+### Resultado esperado
+
+```javascript
+{
+  acknowledged: true,
+  matchedCount: 1,
+  modifiedCount: 1
+}
+```
+
+### Error común — replaceOne vs updateOne
+
+```javascript
+// MAL — reemplaza TODO el documento, pierdes los otros campos
+db.listingsAndReviews.replaceOne(
+  { name: "Cozy Cabin Retreat" },
+  { property_type: "Entire home/apt" }
+)
+
+// BIEN — solo modifica el campo indicado
+db.listingsAndReviews.updateOne(
+  { name: "Cozy Cabin Retreat" },
+  { $set: { property_type: "Entire home/apt" } }
+)
+```
+
+---
+
+## Ejercicio 18 — updateMany con $inc
+
+Incrementar `number_of_reviews` en 1 para todos los listings ubicados en Spain.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.updateMany(
+  { "address.country": "Spain" },
+  { $inc: { number_of_reviews: 1 } }
+)
+```
+
+### ¿Qué aprendemos aquí?
+
+- `updateMany` aplica el cambio a **todos** los documentos que coinciden con el filtro
+- `$inc` incrementa un valor numérico — para decrementar usa un valor negativo
+- El resultado muestra `matchedCount` y `modifiedCount`
+
+### Operadores de actualización más usados
+
+| Operador | Función | Ejemplo |
+|---|---|---|
+| `$set` | Asigna un valor | `{ $set: { campo: "valor" } }` |
+| `$unset` | Elimina un campo | `{ $unset: { campo: "" } }` |
+| `$inc` | Incrementa | `{ $inc: { campo: 1 } }` |
+| `$mul` | Multiplica | `{ $mul: { campo: 1.10 } }` |
+| `$push` | Añade al array | `{ $push: { array: "valor" } }` |
+| `$pull` | Quita del array | `{ $pull: { array: "valor" } }` |
+| `$addToSet` | Añade sin duplicar | `{ $addToSet: { array: "valor" } }` |
+
+---
+
+## Ejercicio 20 — updateOne con upsert: true
+
+Intentar actualizar un listing que no existe. Si no existe, insertarlo con los datos proporcionados.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.updateOne(
+  { name: "Mansión de Prueba" },
+  {
+    $set: {
+      name: "Mansión de Prueba",
+      price: 1500.00,
+      country: "United States"
+    }
+  },
+  { upsert: true }
+)
+```
+
+### ¿Qué aprendemos aquí?
+
+- `upsert: true` es el tercer parámetro, separado de los otros dos
+- Si el documento **existe** → lo actualiza
+- Si el documento **no existe** → lo inserta con los campos del `$set`
+- El resultado muestra `upsertedCount: 1` cuando se inserta nuevo
+
+### Resultado cuando inserta nuevo
+
+```javascript
+{
+  acknowledged: true,
+  matchedCount: 0,
+  modifiedCount: 0,
+  upsertedCount: 1,
+  upsertedId: ObjectId('...')
+}
+```
+
+### Estructura completa con upsert
+
+```javascript
+db.coleccion.updateOne(
+  { filtro },           // primer parámetro — buscar
+  { $set: { ... } },   // segundo parámetro — qué cambiar
+  { upsert: true }     // tercer parámetro — opción
+)
+```

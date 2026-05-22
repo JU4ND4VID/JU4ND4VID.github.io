@@ -1,0 +1,109 @@
+---
+title: "Inserción de Documentos en MongoDB"
+pubDate: 2026-05-10
+description: "insertOne e insertMany con objetos anidados y arrays — ejercicios 2 y 4"
+author: "JU4ND4VID"
+image:
+  url: "/mongo.png"
+  alt: "Inserción de documentos en MongoDB"
+---
+
+## Insertar documentos en MongoDB
+
+En MongoDB no existe un `INSERT INTO` como en SQL. En su lugar usamos `insertOne` para un documento o `insertMany` para varios.
+
+> **Regla clave:** `insertOne` recibe `{}`, `insertMany` recibe `[{}, {}]`.
+> `$set` NO va en inserts — es exclusivo de operaciones de actualización.
+
+---
+
+## Ejercicio 2 — insertOne con Objeto Anidado
+
+Insertar un listing con la estructura `address` anidada, incluyendo `country: "Chile"` y `market: "Santiago"`.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.insertOne({
+  name: "Listing Santiago",
+  address: {
+    country: "Chile",
+    market: "Santiago"
+  }
+})
+```
+
+### ¿Qué aprendemos aquí?
+
+- Los documentos anidados se escriben como objetos literales `{}` dentro del documento principal
+- No se usa dot notation para insertar — eso es solo para consultar
+- MongoDB genera automáticamente un `_id` de tipo `ObjectId` si no lo proporcionas
+
+### Resultado esperado
+
+```javascript
+{
+  acknowledged: true,
+  insertedId: ObjectId('6a02b9d4bc9e150aff6cfe33')
+}
+```
+
+### Error común
+
+```javascript
+// MAL — $set no va en inserts
+db.listingsAndReviews.insertOne({
+  $set: { "address.country": "Chile" }
+})
+
+// BIEN — documento directo
+db.listingsAndReviews.insertOne({
+  address: { country: "Chile", market: "Santiago" }
+})
+```
+
+---
+
+## Ejercicio 4 — insertMany con Arrays
+
+Insertar un listing que incluya un array `amenities` con al menos tres elementos.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.insertMany([
+  {
+    amenities: ["Wifi", "Kitchen", "Free parking"]
+  }
+])
+```
+
+### ¿Qué aprendemos aquí?
+
+- `insertMany` siempre recibe un array `[]` de documentos
+- Los arrays en MongoDB se escriben con corchetes `[]`
+- Puedes insertar un solo documento con `insertMany` si lo envuelves en `[]`
+
+### Resultado esperado
+
+```javascript
+{
+  acknowledged: true,
+  insertedIds: {
+    '0': ObjectId('6a036eebf322c117d4d3c664')
+  }
+}
+```
+
+### Comparación insertOne vs insertMany
+
+| Operación | Parámetro | Uso |
+|---|---|---|
+| `insertOne` | `({})` | Un solo documento |
+| `insertMany` | `([{}, {}])` | Varios documentos |
+
+---
+
+## Restricción de unicidad del _id
+
+Si intentas insertar un documento con un `_id` que ya existe en la colección, MongoDB lanza el error `E11000 duplicate key error`. El `_id` funciona como Primary Key — no puede haber duplicados en la misma colección.

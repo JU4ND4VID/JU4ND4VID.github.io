@@ -1,0 +1,107 @@
+---
+title: "Modelado de Documentos en MongoDB"
+pubDate: 2026-05-10
+description: "Embedding vs Referencing, patrones de diseño y límites de documentos"
+author: "JU4ND4VID"
+image:
+  url: "/mongo.png"
+  alt: "Modelado de documentos en MongoDB"
+---
+
+## La gran decisión: ¿cómo guardo datos relacionados?
+
+En SQL cuando tienes datos relacionados, usas tablas separadas y JOIN. En MongoDB tienes dos opciones: **Embedding** o **Referencing**.
+
+---
+
+## Opción 1: Embedding (documento embebido)
+
+Guardas todo dentro del mismo documento.
+
+```javascript
+{
+  _id: 1,
+  nombre: "Ana García",
+  email: "ana@gmail.com",
+  direcciones: [
+    { tipo: "casa", ciudad: "Bogotá", calle: "Calle 100" },
+    { tipo: "trabajo", ciudad: "Bogotá", calle: "Calle 72" }
+  ]
+}
+```
+
+**¿Cuándo usarlo?**
+- La información se lee junta casi siempre
+- El array no va a crecer infinito
+- Los datos son exclusivos de ese documento
+
+---
+
+## Opción 2: Referencing (referencia por ID)
+
+Guardas los datos en colecciones separadas y los enlazas por `_id`, como un FK en SQL.
+
+```javascript
+// Colección: clientes
+{ _id: 1, nombre: "Ana García" }
+
+// Colección: pedidos
+{ _id: 101, clienteId: 1, total: 50000 }
+{ _id: 102, clienteId: 1, total: 30000 }
+```
+
+**¿Cuándo usarlo?**
+- Los datos se comparten entre muchos documentos
+- El array puede crecer mucho
+- Los datos se consultan de forma independiente
+
+---
+
+## La regla práctica más importante
+
+> **Lo que se lee junto, va junto.**
+
+Si el 90% de las veces que cargas un cliente también necesitas sus direcciones → embebe. Si los pedidos se consultan solos frecuentemente → referencia.
+
+---
+
+## Ejemplo real — documento de Airbnb
+
+```javascript
+{
+  _id: ObjectId("..."),
+  nombre: "Apartamento Centro",
+  precio: NumberDecimal("85.00"),
+  camas: 2,
+  tipo: "Apartment",
+  address: {
+    ciudad: "Porto",
+    pais: "Portugal"
+  },
+  amenities: ["Wifi", "Cable TV", "Kitchen"],
+  host: {
+    host_id: "12345",
+    host_name: "Carlos"
+  }
+}
+```
+
+- `address` es un documento embebido
+- `amenities` es un array de strings
+- `host` es un documento embebido
+- `precio` usa `NumberDecimal` para ser preciso
+
+---
+
+## El límite de 16 MB
+
+Cada documento en MongoDB tiene un límite de **16 MB**. Por eso no puedes tener arrays que crezcan sin control. Si tienes muchos comentarios, muchos pedidos o muchos eventos, considera referencing.
+
+---
+
+## Anti-patrones a evitar
+
+- Arrays sin límite — pueden superar los 16 MB
+- Joins masivos con $lookup constantemente — considera embeber
+- Documentos enormes que cargas íntegros para usar solo un campo — usa proyecciones
+- Demasiados índices — cada uno consume memoria y ralentiza escrituras

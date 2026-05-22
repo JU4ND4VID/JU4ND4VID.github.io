@@ -1,0 +1,234 @@
+---
+title: "Aggregation Framework en MongoDB"
+pubDate: 2026-05-10
+description: "$group, $sort, $count, $lookup y análisis por fecha — ejercicios 22, 24, 26, 28 y 30"
+author: "JU4ND4VID"
+image:
+  url: "/mongo.png"
+  alt: "Aggregation Framework en MongoDB"
+---
+
+## ¿Qué es una pipeline de agregación?
+
+El Aggregation Framework transforma datos en MongoDB. Funciona como una pipeline donde cada etapa recibe documentos, los procesa y los pasa a la siguiente.
+
+```javascript
+db.coleccion.aggregate([  // siempre recibe array []
+  { $etapa1 },
+  { $etapa2 },
+  { $etapa3 }
+])
+```
+
+> **Regla importante:** Los campos del documento dentro del aggregate siempre llevan `$`: `"$price"`, `"$address.country"`.
+
+---
+
+## Ejercicio 22 — $group para Precio Promedio por País
+
+Calcular el precio promedio de los listings por cada `address.country`.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.aggregate([
+  {
+    $group: {
+      _id: "$address.country",
+      precio_promedio: { $avg: "$price" }
+    }
+  }
+])
+```
+
+### ¿Qué aprendemos aquí?
+
+- `_id` en `$group` es **obligatorio** — define por qué campo agrupar
+- `$avg` calcula el promedio del campo indicado
+- Los documentos sin el campo `price` retornan `null` en el promedio
+- Los documentos insertados por nosotros sin `address.country` aparecen con `_id: null`
+
+### Acumuladores disponibles en $group
+
+| Acumulador | Función |
+|---|---|
+| `$sum: 1` | Contar documentos |
+| `$sum: "$campo"` | Sumar valores |
+| `$avg: "$campo"` | Promedio |
+| `$min: "$campo"` | Valor mínimo |
+| `$max: "$campo"` | Valor máximo |
+
+---
+
+## Ejercicio 24 — $group y $sort por property_type
+
+Calcular la cantidad de listings por `property_type` y ordenar de mayor a menor.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.aggregate([
+  {
+    $group: {
+      _id: "$property_type",
+      total: { $sum: 1 }
+    }
+  },
+  {
+    $sort: { total: -1 }
+  }
+])
+```
+
+### ¿Qué aprendemos aquí?
+
+- `$sum: 1` cuenta un documento por cada uno que pasa por el grupo
+- No necesitas `$match` si quieres procesar todos los documentos
+- `$sort` después del `$group` ordena los resultados calculados
+
+### Resultado esperado
+
+```javascript
+{ _id: 'Apartment', total: 3626 }
+{ _id: 'House', total: 606 }
+{ _id: 'Condominium', total: 399 }
+// ...
+```
+
+---
+
+## Ejercicio 26 — Pipeline Complejo con Review Scores
+
+Filtrar listings con al menos 10 reviews y calcular el promedio de `review_scores_rating`.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.aggregate([
+  {
+    $match: {
+      number_of_reviews: { $gt: 10 }
+    }
+  },
+  {
+    $group: {
+      _id: null,
+      promedio: { $avg: "$review_scores.review_scores_rating" }
+    }
+  }
+])
+```
+
+### ¿Qué aprendemos aquí?
+
+- `$match` al inicio filtra antes de agrupar — más eficiente
+- `_id: null` agrupa **todos** los documentos en un solo resultado
+- Los campos anidados en aggregate también usan dot notation con `$`: `"$review_scores.review_scores_rating"`
+
+### Resultado esperado
+
+```javascript
+{ _id: null, promedio: Double('93.78787878787878') }
+```
+
+---
+
+## Ejercicio 28 — $lookup Simulación de JOIN
+
+Describir un pipeline que usaría `$lookup` si existiera una colección `hosts` para unir listings con la información del anfitrión por `host.host_id`.
+
+```javascript
+use('sample_airbnb');
+
+// Ejercicio teórico — la colección hosts no existe en sample_airbnb
+db.listingsAndReviews.aggregate([
+  {
+    $lookup: {
+      from: "hosts",
+      localField: "host.host_id",
+      foreignField: "host_id",
+      as: "informacion_host"
+    }
+  },
+  {
+    $project: {
+      name: 1,
+      "host.host_name": 1,
+      informacion_host: 1,
+      _id: 0
+    }
+  }
+])
+```
+
+### ¿Qué aprendemos aquí?
+
+- `$lookup` es el equivalente al JOIN en SQL
+- Realiza un **left outer join** entre dos colecciones
+- El resultado se guarda como un array en el campo `as`
+
+### Estructura de $lookup
+
+| Parte | Qué hace |
+|---|---|
+| `from` | La colección a unir |
+| `localField` | Campo en la colección actual |
+| `foreignField` | Campo en la otra colección |
+| `as` | Nombre del array resultante |
+
+> **Restricción:** `$lookup` sobre colecciones sin índice en `foreignField` genera consultas muy lentas en producción.
+
+---
+
+## Ejercicio 30 — Análisis por Fecha con $year
+
+Filtrar listings con `last_review` registrada y contar cuántos tuvieron su última revisión en cada año.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.aggregate([
+  {
+    $match: {
+      last_review: { $exists: true }
+    }
+  },
+  {
+    $group: {
+      _id: { $year: "$last_review" },
+      total: { $sum: 1 }
+    }
+  },
+  {
+    $sort: { _id: 1 }
+  }
+])
+```
+
+### ¿Qué aprendemos aquí?
+
+- `$exists: true` filtra documentos que tienen el campo — necesario porque `$year` falla sobre campos nulos
+- `$year` extrae el año de un campo de tipo fecha
+- `$year` va dentro del `_id` del `$group` para agrupar por año
+- `$sort: { _id: 1 }` ordena los años de menor a mayor
+
+### Resultado esperado
+
+```javascript
+{ _id: 2012, total: 5 }
+{ _id: 2013, total: 2 }
+{ _id: 2014, total: 14 }
+{ _id: 2015, total: 97 }
+{ _id: 2016, total: 212 }
+{ _id: 2017, total: 318 }
+{ _id: 2018, total: 1264 }
+```
+
+### Operadores de fecha disponibles
+
+| Operador | Función |
+|---|---|
+| `$year` | Extrae el año |
+| `$month` | Extrae el mes |
+| `$dayOfMonth` | Extrae el día |
+| `$dateToString` | Formatea la fecha como string |

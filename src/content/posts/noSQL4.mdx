@@ -1,0 +1,118 @@
+---
+title: "Consultas Avanzadas con find en MongoDB"
+pubDate: 2026-05-10
+description: "sort, limit, $exists y ordenamiento — ejercicios 14 y 15"
+author: "JU4ND4VID"
+image:
+  url: "/mongo.png"
+  alt: "Consultas avanzadas con find en MongoDB"
+---
+
+## Encadenamiento de métodos en find
+
+En MongoDB puedes encadenar métodos después del `find` para ordenar, paginar y limitar resultados.
+
+```javascript
+db.coleccion.find(filtro, proyeccion)
+  .sort({ campo: -1 })
+  .skip(N)
+  .limit(N)
+```
+
+| Método | Función | Equivalente SQL |
+|---|---|---|
+| `.sort({ campo: 1 })` | Ordenar ascendente | `ORDER BY campo ASC` |
+| `.sort({ campo: -1 })` | Ordenar descendente | `ORDER BY campo DESC` |
+| `.limit(N)` | Máximo N resultados | `LIMIT N` |
+| `.skip(N)` | Saltar N documentos | `OFFSET N` |
+
+---
+
+## Ejercicio 14 — find con sort y limit
+
+Mostrar los 10 listings más caros, proyectando `name`, `price` y `address.country`.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.find(
+  {},
+  {
+    name: 1,
+    price: 1,
+    "address.country": 1,
+    _id: 0
+  }
+).sort({ price: -1 }).limit(10)
+```
+
+### ¿Qué aprendemos aquí?
+
+- El filtro vacío `{}` significa "todos los documentos"
+- `-1` en sort es descendente — los más caros primero
+- Los campos anidados en la proyección también necesitan comillas: `"address.country": 1`
+- `.sort()` y `.limit()` se encadenan después del `find()`
+
+### Error común
+
+```javascript
+// MAL — sort dentro del find
+db.listingsAndReviews.find({}, {}, { sort: { price: -1 } })
+
+// BIEN — sort encadenado
+db.listingsAndReviews.find({}, {}).sort({ price: -1 }).limit(10)
+```
+
+---
+
+## Ejercicio 15 — Proyección y Ordenamiento con $exists
+
+Mostrar `name`, `summary` y `description` de los listings que **no tienen** `last_review`, ordenados por `number_of_reviews` descendente.
+
+```javascript
+use('sample_airbnb');
+
+db.listingsAndReviews.find(
+  { last_review: { $exists: false } },
+  {
+    name: 1,
+    summary: 1,
+    description: 1,
+    _id: 0
+  }
+).sort({ number_of_reviews: -1 })
+```
+
+### ¿Qué aprendemos aquí?
+
+- `$exists: false` filtra documentos donde el campo **no existe o es nulo**
+- `$exists: true` filtra documentos donde el campo **sí existe**
+- Puedes ordenar por un campo que no está en la proyección
+
+### Casos de uso de $exists
+
+```javascript
+// Documentos que tienen el campo
+{ last_review: { $exists: true } }
+
+// Documentos que NO tienen el campo
+{ last_review: { $exists: false } }
+
+// También captura nulos
+{ last_review: null }
+```
+
+---
+
+## Resumen: estructura completa de una consulta find
+
+```javascript
+db.listingsAndReviews
+  .find(
+    { "address.country": "Brazil" },  // filtro
+    { name: 1, price: 1, _id: 0 }     // proyeccion
+  )
+  .sort({ price: -1 })                // ordenar
+  .skip(0)                            // saltar
+  .limit(10)                          // limitar
+```
