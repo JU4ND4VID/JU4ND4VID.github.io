@@ -10,67 +10,56 @@ image:
 
 ## ¿Qué es Alta Disponibilidad y qué es Recuperación ante Desastres?
 
-Son dos conceptos que la gente suele confundir porque los dos responden a la misma pregunta general: ¿qué pasa cuando algo falla? La diferencia está en **qué tan grave es el fallo**.
+Cuando hablamos de que un sistema "siempre esté disponible", en realidad estamos hablando
+de dos cosas distintas dependiendo de qué tan grave sea el problema.
 
-**Alta Disponibilidad (HA)** cubre los fallos cotidianos y menores: un servicio que se cae, un pod que muere, una conexión de base de datos que se pierde, un servidor que se reinicia por una actualización. Son situaciones que ocurren con frecuencia y el sistema debe recuperarse **solo, rápido y sin que el usuario lo note**.
+**Alta Disponibilidad (HA)** es lo que pasa cuando algo falla de forma cotidiana: un servicio
+que se cae, una conexión que se pierde, un servidor que se reinicia. El sistema debe
+recuperarse solo y rápido, sin que el usuario lo note.
 
-**Recuperación ante Desastres (DR)** cubre los fallos catastróficos: el disco duro del servidor se quema, el datacenter se inunda, alguien ejecuta un `DROP TABLE` en producción, una migración corrupta destruye la base de datos. Son situaciones poco frecuentes pero devastadoras. Aquí la recuperación puede ser manual o semi-automática y tarda más — pero debe estar planificada con anticipación.
+**Recuperación ante Desastres (DR)** es lo que pasa cuando el fallo es catastrófico: el disco
+se quema, alguien borra una tabla en producción, el servidor físico muere. Aquí la
+recuperación puede tardar más y puede requerir intervención manual, pero debe estar
+planificada con anticipación.
 
-> Dicho de forma simple: HA es para los lunes. DR es para las pesadillas.
-
----
-
-## Diferencia entre HA y DR con ejemplos reales del proyecto
-
-| Situación | Tipo | ¿Cómo responde el sistema? |
-|---|---|---|
-| El proceso Flask se cae en producción | HA | La segunda instancia sigue sirviendo peticiones |
-| MongoDB primario pierde conexión | HA | El Replica Set elige un nuevo primario en segundos |
-| El servidor MySQL principal se apaga | HA | La réplica se promueve a primario |
-| El disco del servidor se destruye físicamente | DR | Se restaura desde el último backup |
-| Un `DROP TABLE asistencia` accidental en producción | DR | Se restaura desde el backup diferencial del día anterior |
-| El datacenter completo queda sin luz por 48 horas | DR | Se levanta el sistema desde cero en otro servidor con los backups |
+> En resumen: HA es para los problemas del día a día. DR es para las situaciones que
+esperamos que nunca pasen, pero para las que igual hay que estar preparados.
 
 ---
 
-## Métricas RPO y RTO para FutbolTrack
+## ¿Cómo se mide si la estrategia funciona?
 
 Antes de definir cualquier estrategia hay que responder dos preguntas concretas:
 
-**RPO — Recovery Point Objective:** ¿Cuántos datos podemos perder? Es decir, si todo se cae ahora, ¿hasta qué punto en el tiempo podemos retroceder sin que sea inaceptable?
+**RPO — Recovery Point Objective:** ¿Cuántos datos podemos perder? Si todo se cae ahora,
+¿hasta qué punto en el tiempo podemos retroceder sin que sea un problema grave?
 
-**RTO — Recovery Time Objective:** ¿Cuánto tiempo podemos estar caídos? Es decir, ¿cuánto tiempo puede pasar desde el fallo hasta que el sistema vuelve a funcionar?
+**RTO — Recovery Time Objective:** ¿Cuánto tiempo podemos estar caídos? ¿Cuánto tiempo
+puede pasar desde el fallo hasta que el sistema vuelve a funcionar?
 
-Para FutbolTrack los valores definidos son:
+Para FutbolTrack definimos estos valores:
 
 | Métrica | Valor | Justificación |
 |---|---|---|
-| **RPO** | 1 hora | Un entrenamiento dura 2 horas. Perder más de 1 hora de registros de asistencia o estadísticas es inaceptable operativamente para el entrenador |
-| **RTO** | 30 minutos | Los entrenamientos ocurren en horarios fijos. Si el sistema está caído más de 30 minutos durante una sesión activa, el entrenador no puede registrar asistencia en tiempo real |
+| **RTO** | 4 horas | Una academia opera en franjas de mañana y tarde. Tener el sistema caído más de 4 horas obliga a volver al papel y reingresar todo después, lo que consideramos el límite máximo tolerable |
+| **RPO** | 15 minutos | Una sesión dura entre 90 y 120 minutos. Perder más de 15 minutos de asistencia o estadísticas tomadas en tiempo real significa perder un bloque completo de ejercicios |
 
-Estos valores guían todas las decisiones que se toman a continuación. Cada estrategia de HA, DR y backup debe garantizar que nunca se superen estos límites.
+Estos dos valores guían todas las decisiones de backup y disponibilidad que se describen
+a continuación.
 
 ---
 
 ## Estrategia HA — Backend Flask
 
-El backend de FutbolTrack es una API REST en Flask. Un solo proceso Flask es un punto único de fallo: si cae, toda la aplicación queda inaccesible.
+El backend es una API REST en Flask. Si corre en un solo proceso y ese proceso se cae,
+toda la aplicación queda inaccesible.
 
-**Solución:** ejecutar mínimo **2 instancias del servidor Flask** detrás de un load balancer como nginx o un Application Load Balancer en cloud.
+La solución es correr mínimo **2 instancias de Flask** detrás de un load balancer como nginx.
+Si una instancia falla, el load balancer redirige todo el tráfico a la otra automáticamente.
 
-```
-Usuario
-   │
-   ▼
-[Load Balancer - nginx]
-   │              │
-   ▼              ▼
-[Flask 1]     [Flask 2]
-```
-
-Si una instancia cae, el load balancer detecta que no responde y redirige todo el tráfico a la otra en segundos. El usuario no nota nada.
-
-Esto funciona bien en FutbolTrack porque la autenticación usa **JWT (tokens stateless)** — el token no vive en el servidor sino en el cliente, así que cambiar de instancia no rompe la sesión del entrenador.
+Esto funciona bien en FutbolTrack porque la autenticación usa **JWT**, que es stateless — el
+token vive en el cliente, no en el servidor. Cambiar de instancia no rompe la sesión del
+entrenador.
 
 ---
 
@@ -78,156 +67,64 @@ Esto funciona bien en FutbolTrack porque la autenticación usa **JWT (tokens sta
 
 MySQL por defecto corre en un solo servidor. Si ese servidor falla, no hay base de datos.
 
-**Solución:** configurar **replicación primario → réplica**.
+La solución es configurar **replicación primario → réplica**:
 
-```
-[MySQL Primario]  ──── replica en tiempo real ────►  [MySQL Réplica]
-  (escrituras)                                          (lecturas)
-```
+- Todas las escrituras van al primario (crear entrenamientos, registrar asistencia, etc.)
+- Las lecturas de reportes pueden ir a la réplica para no sobrecargar el primario
+- Si el primario falla, la réplica se promueve manualmente o con una herramienta como MHA
 
-Cómo funciona en FutbolTrack:
-
-- Todas las **escrituras** (crear entrenamiento, registrar asistencia, guardar jugador) van al primario.
-- Las **lecturas de reportes** (estadísticas, porcentajes, cronograma) pueden ir a la réplica para no sobrecargar el primario.
-- Los stored procedures `sp_crear_entrenamiento`, `sp_registrar_asistencia_sesion` y demás **siempre se ejecutan contra el primario**.
-- Si el primario falla, la réplica se promueve manualmente o con una herramienta como **MHA (MySQL High Availability)** o **Orchestrator**.
-
-> La replicación no es un backup. La replicación copia los datos en tiempo real, lo que significa que si alguien borra datos accidentalmente en el primario, esa eliminación también se replica. Para protegerse contra eso están los backups.
+> Importante: la replicación no es un backup. Si alguien borra datos en el primario,
+esa eliminación también se replica. Para eso están los backups.
 
 ---
 
 ## Estrategia HA — MongoDB
 
-MongoDB tiene una ventaja sobre MySQL en este aspecto: el failover automático está incorporado en su arquitectura de **Replica Set**.
+MongoDB tiene failover automático incorporado a través de su arquitectura de **Replica Set**.
 
-**Solución:** configurar un Replica Set de **3 nodos** — 1 primario y 2 secundarios.
+La configuración es de 3 nodos: 1 primario y 2 secundarios. Si el primario pierde conexión,
+los dos secundarios hacen una elección automática en menos de 10 segundos y uno se
+convierte en el nuevo primario. La aplicación reconecta sola.
 
-```
-[Mongo Primario]
-      │
-      ├──► [Mongo Secundario 1]
-      │
-      └──► [Mongo Secundario 2]
-```
-
-Si el nodo primario pierde conexión, los dos secundarios realizan una **elección automática** en menos de 10 segundos y uno de ellos se convierte en el nuevo primario. La aplicación reconecta sola.
-
-Esto protege las tres colecciones críticas de FutbolTrack:
-- `planes_sesion` — los planes detallados de cada entrenamiento
-- `estadisticas_jugador` — notas, sprints y distancia por sesión
-- `observaciones_sesion` — aspectos positivos, a mejorar y condiciones del clima
-
-El campo `id_entrenamiento_mysql` en cada documento de MongoDB es el puente con MySQL. Con el Replica Set activo, ese vínculo nunca se rompe por un fallo de nodo.
+Esto protege las tres colecciones de FutbolTrack:
+- `planes_sesion`
+- `estadisticas_jugador`
+- `observaciones_sesion`
 
 ---
 
 ## Estrategia DR — Desastres totales
 
-Cuando el desastre ya ocurrió y no hay nada que recuperar en caliente, entra en juego el plan de DR. Los pilares son tres:
+Cuando el desastre ya ocurrió y no hay nada que recuperar en caliente, entra el plan de DR.
+Los tres pilares son:
 
-**1. Backups en ubicación separada geográficamente**
-Los archivos de backup nunca deben vivir en el mismo servidor que la base de datos. Si el servidor muere, el backup muere con él. Se almacenan en un bucket S3 en otra región, un servidor externo, o un NAS en otra ubicación física.
+**1. Backups en ubicación separada**
+Los backups nunca deben vivir en el mismo servidor que la base de datos. Si el servidor
+muere, el backup muere con él. Se almacenan en un bucket externo o servidor separado
+geográficamente.
 
-**2. Runbook documentado y probado**
-Un runbook es un documento con los pasos exactos para levantar el sistema desde cero. No sirve de nada tener backups si en el momento del desastre nadie sabe cómo restaurarlos bajo presión. El runbook debe incluir: cómo restaurar MySQL, cómo restaurar MongoDB, cómo levantar Flask, cómo verificar que las conexiones funcionan, y en qué orden hacer todo.
+**2. Runbook documentado**
+Un runbook es un documento con los pasos exactos para levantar el sistema desde cero.
+No sirve de nada tener backups si nadie sabe cómo restaurarlos bajo presión.
 
-**3. Pruebas de restauración cada 30 días**
-Un backup que nunca se ha probado es un backup que podría no funcionar. Una vez al mes se debe restaurar el backup en un servidor de pruebas y verificar que los datos son correctos y que el sistema arranca. Esto también sirve para medir el RTO real.
-
----
-
-## ¿Qué es un backup completo, diferencial e incremental?
-
-Antes de definir la estrategia hay que entender los tres tipos de backup:
-
-**Backup completo:** copia absolutamente todos los datos en ese momento. Es el más pesado en espacio y tiempo pero el más simple de restaurar — solo necesitas ese archivo.
-
-**Backup diferencial:** copia solo los datos que cambiaron desde el **último backup completo**. Es más rápido que hacer un completo cada vez. Para restaurar necesitas el último completo más el último diferencial — solo dos archivos.
-
-**Backup incremental:** copia solo los datos que cambiaron desde el **último backup de cualquier tipo** (sea completo o incremental anterior). Es el más liviano pero el más complejo de restaurar — necesitas el completo más cada incremental en orden hasta llegar al punto deseado.
-
-| Tipo | Qué copia | Velocidad de backup | Complejidad de restauración |
-|---|---|---|---|
-| Completo | Todo | Lenta | Muy simple — 1 archivo |
-| Diferencial | Cambios desde el último completo | Media | Simple — 2 archivos |
-| Incremental | Cambios desde el último backup | Rápida | Compleja — N archivos en orden |
+**3. Pruebas de restauración periódicas**
+Un backup que nunca se ha probado es un backup que podría no funcionar. Hay que
+restaurarlo en un servidor de pruebas periódicamente para verificar que todo está correcto.
 
 ---
 
-## ¿Por qué diferencial para MySQL y no incremental?
+## Tipos de backup — ¿cuál es cuál?
 
-FutbolTrack tiene 50 jugadores, 2 entrenadores y sesiones periódicas. El volumen de datos que cambia entre un día y otro es pequeño. En ese contexto el incremental no aporta ventajas reales de espacio o velocidad que justifiquen su complejidad adicional de restauración.
+Antes de ver la estrategia concreta hay que entender los tres tipos:
 
-El diferencial es el punto medio ideal: es más rápido que hacer un completo diario, y es mucho más simple de restaurar que encadenar múltiples incrementales. En el momento del desastre, bajo presión y con el RTO de 30 minutos corriendo, la simplicidad vale más que el espacio ahorrado.
+**Backup completo:** copia todo. Es el más pesado pero el más simple de restaurar.
 
-> Si el proyecto creciera a miles de jugadores y cientos de sesiones diarias, ahí sí tendría sentido revisar si el incremental es necesario.
+**Backup diferencial:** copia solo lo que cambió desde el último completo. Para restaurar
+necesitas el último completo más el último diferencial.
+
+**Backup incremental:** copia solo lo que cambió desde el último backup de cualquier tipo.
+Es el más liviano pero el más complejo de restaurar porque hay que encadenar varios archivos.
 
 ---
 
 ## Estrategia de backup — MySQL
-
-```
-Domingo 2:00 AM    →   Backup COMPLETO
-Lun – Sáb 11:00 PM →   Backup DIFERENCIAL
-Continuo           →   Binary Logs activos
-```
-
-| Tipo | Frecuencia | Herramienta | Qué incluye |
-|---|---|---|---|
-| Completo | Semanal — domingo 2:00 AM | `mysqldump` o `xtrabackup` | Todas las tablas, stored procedures, triggers, funciones |
-| Diferencial | Diario — lunes a sábado 11:00 PM | `mysqldump` con binary logs | Solo cambios desde el último completo |
-| Binary Log | Continuo | MySQL Binary Logging activado | Cada transacción individual |
-
-**Binary Logging** es lo que permite cumplir el RPO de 1 hora. Aunque el último diferencial tenga 23 horas de antigüedad, los binary logs registran cada transacción desde ese punto hasta el momento del fallo. Con ellos se puede hacer un **Point-In-Time Recovery** — restaurar la base de datos exactamente al minuto antes del desastre.
-
-**Retención:**
-- Backups completos: 4 semanas
-- Backups diferenciales: 7 días
-- Binary logs: últimas 48 horas
-
----
-
-## Estrategia de backup — MongoDB
-
-```
-Domingo 2:30 AM    →   Backup COMPLETO
-Lun – Sáb 11:30 PM →   Backup INCREMENTAL lógico
-```
-
-| Tipo | Frecuencia | Herramienta | Qué incluye |
-|---|---|---|---|
-| Completo | Semanal — domingo 2:30 AM | `mongodump` | Las 3 colecciones completas |
-| Incremental lógico | Diario — lunes a sábado 11:30 PM | `mongodump` filtrado por fecha | Documentos nuevos o modificados |
-
-MongoDB no tiene binary logs nativos como MySQL. El incremental se implementa filtrando por timestamp de inserción o usando **Change Streams** para capturar documentos nuevos. En FutbolTrack los documentos de MongoDB son mayormente de inserción — un plan de sesión se crea una vez y raramente se modifica — lo que hace el incremental lógico confiable y simple.
-
-Se ejecuta 30 minutos después que MySQL para no saturar la red con dos operaciones pesadas al mismo tiempo.
-
-**Retención:**
-- Backups completos: 4 semanas
-- Backups incrementales: 7 días
-
----
-
-## La regla de oro — sincronía entre motores
-
-Este es el punto más crítico de toda la estrategia de backup en FutbolTrack.
-
-La tabla `entrenamiento` en MySQL tiene el campo `id_plan_mongodb` que almacena el `_id` de un documento en MongoDB. Esa referencia es el puente entre los dos motores. Si se restauran a puntos temporales distintos, ese puente se rompe:
-
-- MySQL restaurado al domingo puede tener un `id_plan_mongodb` que apunta a un plan que en MongoDB fue creado el miércoles y aún no existe en el backup del domingo.
-- MongoDB restaurado al miércoles puede tener planes que en MySQL aún no tienen entrenamiento asociado.
-
-En los dos casos el sistema queda en un estado inconsistente que es muy difícil de depurar.
-
-**La regla:** siempre restaurar MySQL y MongoDB al **mismo punto temporal**. Los backups de ambos motores deben ejecutarse en la misma ventana horaria y etiquetarse con el mismo timestamp. En el momento de una restauración, se usan siempre los archivos del mismo momento.
-
-```
-Domingo 2:00 AM  →  MySQL COMPLETO   ┐
-Domingo 2:30 AM  →  MongoDB COMPLETO ┘  mismo snapshot semanal
-
-Lun–Sáb 11:00 PM →  MySQL DIFERENCIAL   ┐
-Lun–Sáb 11:30 PM →  MongoDB INCREMENTAL ┘  mismo snapshot diario
-```
-
-> Nunca restaurar un motor sin restaurar el otro al mismo punto. Aunque parezca que "solo fue un problema de MySQL", la integridad referencial entre los dos motores exige que siempre se traten como una unidad.
