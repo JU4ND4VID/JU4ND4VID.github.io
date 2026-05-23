@@ -1,0 +1,396 @@
+---
+title: "ETL con Python — FutbolTrack"
+pubDate: 2026-05-22
+description: "Extracción desde MySQL y MongoDB, transformación con pandas y carga en una tabla de reportes"
+author: "JU4ND4VID"
+image:
+  url: "/py.png"
+  alt: "ETL con Python — FutbolTrack"
+---
+
+## ¿Qué es un ETL y por qué lo usamos en FutbolTrack?
+
+ETL significa **Extract, Transform, Load** — en español: Extraer, Transformar y Cargar. Es un proceso que toma datos de una o varias fuentes, los limpia y combina, y los deposita en un destino listo para consultar o analizar.
+
+En FutbolTrack el problema era este: los datos de los jugadores viven en **MySQL** (asistencias, categorías, posiciones) y las estadísticas de rendimiento viven en **MongoDB** (notas, sprints, distancia recorrida). Ninguna de las dos bases por separado te da el panorama completo de un jugador. El ETL resuelve eso: extrae de ambas fuentes, combina todo en un solo lugar y lo deja listo en una tabla de reportes dentro del mismo MySQL.
+
+> **¿Por qué ETL y no ELT?** ELT carga primero y transforma después, lo cual tiene sentido cuando manejas millones de registros en un data warehouse potente. FutbolTrack tiene 50 jugadores y sesiones periódicas — el volumen es pequeño y el ETL clásico es más simple, más didáctico y más fácil de mantener.
+
+---
+
+## Contexto de la arquitectura
+
+FutbolTrack está compuesto por tres partes independientes:
+
+```
+futboltrack-back/     ← API REST en Flask (Python)
+futboltrack-front/    ← Interfaz web en React
+futboltrack-etl/      ← Proceso ETL (este proyecto)
+```
+
+El ETL **no forma parte del backend**. Vive en su propia carpeta porque tiene un propósito distinto: mientras el backend sirve datos en tiempo real para la app, el ETL procesa y consolida datos para análisis y reportes. Mezclarlos en el mismo proyecto ensuciaría la arquitectura y haría el código más difícil de mantener.
+
+Lo único que comparten es el acceso a las mismas bases de datos.
+
+---
+
+## Estructura del proyecto ETL
+
+```
+futboltrack-etl/
+├── extract.py        ← Conexión y extracción desde MySQL y MongoDB
+├── transform.py      ← Limpieza, combinación y cálculo de métricas
+├── load.py           ← Inserción del resultado en MySQL
+└── main.py           ← Orquestador que ejecuta los 3 pasos en orden
+```
+
+Cada archivo tiene una única responsabilidad. Si mañana cambia la fuente de datos, solo tocas `extract.py`. Si cambia el cálculo de asistencia, solo tocas `transform.py`. Eso es lo que hace mantenible un ETL.
+
+---
+
+## Requisitos previos
+
+Antes de ejecutar el ETL necesitas tener Python instalado y las siguientes librerías:
+
+```bash
+pip install pymysql pymongo pandas sqlalchemy
+```
+
+| Librería | Para qué se usa |
+|---|---|
+| `pymysql` | Conector de Python para MySQL |
+| `pymongo` | Conector de Python para MongoDB |
+| `pandas` | Manipulación y transformación de datos en tablas |
+| `sqlalchemy` | Motor de conexión que pandas necesita para leer SQL sin advertencias |
+
+---
+
+## Tabla destino en MySQL
+
+Antes de correr el ETL por primera vez necesitas crear la tabla donde se va a depositar el resultado. Ejecuta esto una sola vez en tu MySQL:
+
+```sql
+CREATE TABLE IF NOT EXISTS reporte_jugador (
+    identificacion        VARCHAR(15)    NOT NULL,
+    nombre_completo       VARCHAR(100)   NOT NULL,
+    categoria             VARCHAR(60)    NOT NULL,
+    posicion              VARCHAR(20)    NOT NULL,
+    total_sesiones        INT            DEFAULT 0,
+    sesiones_presente     INT            DEFAULT 0,
+    porcentaje_asistencia DECIMAL(5,2)   DEFAULT 0.00,
+    promedio_nota         DECIMAL(4,2)   DEFAULT NULL,
+    total_sprints         INT            DEFAULT NULL,
+    distancia_total_km    DECIMAL(6,2)   DEFAULT NULL,
+    fecha_actualizacion   DATETIME       DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (identificacion)
+);
+```
+
+### ¿Por qué estas columnas?
+
+- `identificacion` es la clave primaria — identifica de forma única a cada jugador y evita duplicados si el ETL se corre más de una vez.
+- `total_sesiones` y `sesiones_presente` vienen de MySQL y permiten calcular el porcentaje de asistencia.
+- `promedio_nota`, `total_sprints` y `distancia_total_km` vienen de MongoDB y representan el rendimiento físico acumulado.
+- `fecha_actualizacion` se actualiza sola cada vez que se modifica el registro, lo que permite saber cuándo fue la última vez que corrió el ETL.
+
+---
+
+## Extracción — `extract.py`
+
+Este archivo se conecta a MySQL y MongoDB y trae los datos crudos sin modificarlos. La extracción tiene tres funciones independientes.
+
+```python
+import pymongo
+import pandas as pd
+from sqlalchemy import create_engine
+
+MYSQL_URL = "mysql+pymysql://futboltrack_user:FutbolTrack2026*@192.168.10.14:3306/mydb?charset=utf8mb3"
+MONGO_URI = "mongodb://192.168.10.12:27017/"
+MONGO_DB  = "futboltrack"
+
+
+def extraer_jugadores():
+    engine = create_engine(MYSQL_URL)
+    query = """
+        SELECT
+            j.identificacion_jugador,
+            CONCAT(p.nombre, ' ', p.apellido) AS nombre_completo,
+            c.nombre                           AS categoria,
+            j.posicion
+        FROM jugador j
+        JOIN persona   p ON j.identificacion_jugador = p.identificacion
+        JOIN categoria c ON j.id_categoria           = c.id_categoria
+    """
+    df = pd.read_sql(query, engine)
+    engine.dispose()
+    return df
+
+
+def extraer_asistencias():
+    engine = create_engine(MYSQL_URL)
+    query = """
+        SELECT
+            a.identificacion_jugador,
+            COUNT(*)                              AS total_sesiones,
+            SUM(a.estado_asistencia = 'presente') AS sesiones_presente
+        FROM asistencia a
+        JOIN entrenamiento e ON a.id_entrenamiento = e.id_entrenamiento
+        WHERE e.estado = 'realizado'
+        GROUP BY a.identificacion_jugador
+    """
+    df = pd.read_sql(query, engine)
+    engine.dispose()
+    return df
+
+
+def extraer_estadisticas_mongo():
+    client = pymongo.MongoClient(MONGO_URI)
+    db     = client[MONGO_DB]
+    registros = []
+    for doc in db.estadisticas_jugador.find():
+        for jugador in doc.get("jugadores", []):
+            registros.append({
+                "identificacion_jugador": jugador.get("identificacion_jugador"),
+                "nota":                  jugador.get("nota"),
+                "sprints":               jugador.get("sprints"),
+                "distancia_km":          jugador.get("distancia_km")
+            })
+    client.close()
+    return pd.DataFrame(registros)
+```
+
+### ¿Qué hace cada función?
+
+**`extraer_jugadores()`** consulta tres tablas de MySQL con JOIN para traer el nombre completo, la categoría y la posición de cada jugador. Devuelve un DataFrame con 50 filas, una por jugador.
+
+**`extraer_asistencias()`** agrupa los registros de la tabla `asistencia` filtrando solo entrenamientos con estado `realizado`. Por cada jugador calcula cuántas sesiones tuvo en total y cuántas marcó como presente. Devuelve un DataFrame con 50 filas.
+
+**`extraer_estadisticas_mongo()`** recorre la colección `estadisticas_jugador` en MongoDB. Cada documento contiene un array de jugadores con sus métricas por entrenamiento. La función desanida ese array y crea una fila por cada combinación jugador-entrenamiento. Devuelve un DataFrame con 129 filas porque un mismo jugador aparece en múltiples entrenamientos.
+
+> **¿Por qué `.get()` en MongoDB y no acceso directo con `["campo"]`?** Porque si un documento no tiene ese campo, el acceso directo lanza un `KeyError` y el ETL se rompe. `.get()` devuelve `None` en su lugar y el proceso continúa.
+
+> **¿Por qué SQLAlchemy en vez de pymysql directo?** Pandas moderno requiere una conexión SQLAlchemy para leer SQL correctamente. Si se usa pymysql directo, pandas lanza advertencias y en versiones futuras podría dejar de funcionar.
+
+---
+
+## Transformación — `transform.py`
+
+Este archivo recibe los tres DataFrames crudos y los convierte en uno solo limpio y calculado.
+
+```python
+import pandas as pd
+
+
+def transformar(df_jugadores, df_asistencias, df_estadisticas):
+
+    # 1. Agrupar estadísticas MongoDB por jugador
+    df_stats = df_estadisticas.groupby("identificacion_jugador").agg(
+        promedio_nota      = ("nota",         "mean"),
+        total_sprints      = ("sprints",      "sum"),
+        distancia_total_km = ("distancia_km", "sum")
+    ).reset_index()
+
+    # 2. Unir jugadores + asistencias
+    df = pd.merge(
+        df_jugadores,
+        df_asistencias,
+        on  = "identificacion_jugador",
+        how = "left"
+    )
+
+    # 3. Unir con estadísticas MongoDB
+    df = pd.merge(
+        df,
+        df_stats,
+        on  = "identificacion_jugador",
+        how = "left"
+    )
+
+    # 4. Calcular porcentaje de asistencia
+    df["total_sesiones"]    = df["total_sesiones"].fillna(0).astype(int)
+    df["sesiones_presente"] = df["sesiones_presente"].fillna(0).astype(int)
+
+    df["porcentaje_asistencia"] = df.apply(
+        lambda row: round((row["sesiones_presente"] / row["total_sesiones"]) * 100, 2)
+        if row["total_sesiones"] > 0 else 0.0,
+        axis=1
+    )
+
+    # 5. Redondear decimales
+    df["promedio_nota"]      = df["promedio_nota"].round(2)
+    df["distancia_total_km"] = df["distancia_total_km"].round(2)
+
+    # 6. Seleccionar columnas finales
+    df = df[[
+        "identificacion_jugador", "nombre_completo", "categoria",
+        "posicion", "total_sesiones", "sesiones_presente",
+        "porcentaje_asistencia", "promedio_nota",
+        "total_sprints", "distancia_total_km"
+    ]]
+
+    return df
+```
+
+### ¿Qué hace cada paso?
+
+**Paso 1 — Agrupar MongoDB:** El DataFrame de estadísticas tiene 129 filas porque un jugador aparece en múltiples entrenamientos. Necesitamos una sola fila por jugador con sus métricas acumuladas. `groupby` agrupa por identificación y `agg` calcula el promedio de notas, la suma de sprints y la suma de distancia.
+
+**Paso 2 y 3 — Merge con `left`:** El merge es el equivalente al JOIN de SQL. Se usa `how="left"` para conservar todos los jugadores aunque no tengan asistencias o estadísticas registradas aún. Si se usara `inner`, los jugadores sin datos desaparecerían del reporte.
+
+**Paso 4 — Porcentaje de asistencia:** Se divide `sesiones_presente` entre `total_sesiones` y se multiplica por 100. El `if row["total_sesiones"] > 0` evita una división por cero para jugadores que aún no tienen sesiones registradas.
+
+**Paso 5 — Redondear:** Los promedios y sumas de decimales pueden tener muchos dígitos. Se redondea a 2 decimales para que la tabla quede limpia.
+
+> **¿Por qué `fillna(0)` en las asistencias?** Cuando un jugador no tiene ningún registro de asistencia, el merge genera un `NaN` (valor nulo de pandas). Si no se reemplaza por 0 antes de calcular el porcentaje, la operación matemática falla.
+
+---
+
+## Carga — `load.py`
+
+Este archivo toma el DataFrame transformado y lo inserta en la tabla `reporte_jugador` de MySQL.
+
+```python
+from sqlalchemy import create_engine
+
+MYSQL_URL = "mysql+pymysql://futboltrack_user:FutbolTrack2026*@192.168.10.14:3306/mydb?charset=utf8mb3"
+
+
+def cargar(df):
+    engine = create_engine(MYSQL_URL)
+    df = df.rename(columns={"identificacion_jugador": "identificacion"})
+
+    conn   = engine.raw_connection()
+    cursor = conn.cursor()
+
+    for _, row in df.iterrows():
+        cursor.execute("""
+            INSERT INTO reporte_jugador (
+                identificacion, nombre_completo, categoria, posicion,
+                total_sesiones, sesiones_presente, porcentaje_asistencia,
+                promedio_nota, total_sprints, distancia_total_km
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                nombre_completo       = VALUES(nombre_completo),
+                categoria             = VALUES(categoria),
+                posicion              = VALUES(posicion),
+                total_sesiones        = VALUES(total_sesiones),
+                sesiones_presente     = VALUES(sesiones_presente),
+                porcentaje_asistencia = VALUES(porcentaje_asistencia),
+                promedio_nota         = VALUES(promedio_nota),
+                total_sprints         = VALUES(total_sprints),
+                distancia_total_km    = VALUES(distancia_total_km)
+        """, (
+            row["identificacion"],
+            row["nombre_completo"],
+            row["categoria"],
+            row["posicion"],
+            row["total_sesiones"],
+            row["sesiones_presente"],
+            row["porcentaje_asistencia"],
+            None if str(row["promedio_nota"])      == "nan" else row["promedio_nota"],
+            None if str(row["total_sprints"])      == "nan" else int(row["total_sprints"]),
+            None if str(row["distancia_total_km"]) == "nan" else row["distancia_total_km"]
+        ))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    print(f"✅ {len(df)} registros cargados en reporte_jugador.")
+```
+
+### ¿Qué es un upsert y por qué se usa aquí?
+
+Un **upsert** es una operación que combina INSERT y UPDATE: si el registro no existe lo inserta, y si ya existe lo actualiza. En MySQL se logra con `ON DUPLICATE KEY UPDATE`.
+
+Esto es fundamental para el ETL porque permite correrlo múltiples veces sin duplicar datos. La primera vez inserta los 50 jugadores. La segunda vez, si nuevas sesiones fueron registradas, actualiza los porcentajes y métricas de cada jugador existente.
+
+> **¿Por qué el chequeo `if str(row["..."] == "nan"`?** Cuando pandas no tiene un valor numérico para una celda (por ejemplo, un jugador que no tiene estadísticas en MongoDB), guarda un `NaN`. MySQL no entiende `NaN` — hay que convertirlo a `None` para que se inserte como `NULL` en la base de datos.
+
+---
+
+## Orquestador — `main.py`
+
+Este archivo conecta los tres pasos en el orden correcto y muestra el progreso en la terminal.
+
+```python
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
+
+from extract   import extraer_jugadores, extraer_asistencias, extraer_estadisticas_mongo
+from transform import transformar
+from load      import cargar
+
+
+def ejecutar_etl():
+    print("=" * 50)
+    print("   INICIANDO ETL — FutbolTrack")
+    print("=" * 50)
+
+    print("\n📥 [1/3] Extrayendo datos...")
+    df_jugadores    = extraer_jugadores()
+    df_asistencias  = extraer_asistencias()
+    df_estadisticas = extraer_estadisticas_mongo()
+    print(f"   ✔ Jugadores extraídos:     {len(df_jugadores)}")
+    print(f"   ✔ Asistencias extraídas:   {len(df_asistencias)}")
+    print(f"   ✔ Estadísticas extraídas:  {len(df_estadisticas)}")
+
+    print("\n⚙️  [2/3] Transformando datos...")
+    df_final = transformar(df_jugadores, df_asistencias, df_estadisticas)
+    print(f"   ✔ Registros transformados: {len(df_final)}")
+
+    print("\n📤 [3/3] Cargando en MySQL...")
+    cargar(df_final)
+
+    print("\n" + "=" * 50)
+    print("   ETL COMPLETADO EXITOSAMENTE ✅")
+    print("=" * 50)
+    print("\nVista previa del resultado:")
+    print(df_final.to_string(index=False))
+
+
+if __name__ == "__main__":
+    ejecutar_etl()
+```
+
+El `if __name__ == "__main__"` al final significa que el ETL solo se ejecuta cuando corres el archivo directamente. Si en el futuro lo importas desde otro script, no se dispara automáticamente.
+
+---
+
+
+
+---
+
+## Resultado — ¿qué queda en la tabla `reporte_jugador`?
+
+Después de correr el ETL, la tabla tiene una fila por cada jugador con toda su información consolidada:
+
+| Columna | Origen | Qué representa |
+|---|---|---|
+| `identificacion` | MySQL | Documento de identidad del jugador |
+| `nombre_completo` | MySQL | Nombre y apellido concatenados |
+| `categoria` | MySQL | Sub-15 o Sub-17 |
+| `posicion` | MySQL | Portero, Defensa, Mediocampista, Delantero |
+| `total_sesiones` | MySQL | Cuántos entrenamientos realizados tuvo su categoría |
+| `sesiones_presente` | MySQL | Cuántos asistió marcado como presente |
+| `porcentaje_asistencia` | Calculado | (presente / total) × 100 |
+| `promedio_nota` | MongoDB | Promedio de notas en todos los entrenamientos |
+| `total_sprints` | MongoDB | Suma de sprints acumulados |
+| `distancia_total_km` | MongoDB | Suma de kilómetros recorridos |
+
+---
+
+## Decisiones técnicas
+
+**¿Por qué ETL y no ELT?**
+ELT tiene sentido en proyectos con grandes volúmenes que usan data warehouses como BigQuery o Snowflake. FutbolTrack maneja 50 jugadores y sesiones semanales — el ETL clásico con Python es más simple, más transparente y más fácil de depurar cuando algo falla.
+
+**¿Por qué pandas?**
+Porque ya se usa Python en el backend del proyecto, pandas es la librería estándar para manipulación de datos en Python, y para este volumen de datos su rendimiento es más que suficiente. Permite ver y depurar los datos en cada paso con `print(df)` antes de cargarlos.
+
+**¿Por qué SQLAlchemy en vez de pymysql directo?**
+Pandas requiere una conexión SQLAlchemy para ejecutar `pd.read_sql()` sin advertencias. En versiones futuras de pandas, usar pymysql directo dejará de funcionar del todo.
+
+**¿Por qué el ETL vive en su propia carpeta?**
+Porque tiene un ciclo de vida distinto al backend. El backend corre 24/7. El ETL se ejecuta periódicamente. Separarlos permite actualizarlos, versionarlos y desplegarlos de forma independiente sin riesgo de romper la API.
